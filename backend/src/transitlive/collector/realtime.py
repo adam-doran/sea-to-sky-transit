@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from urllib.parse import urlsplit
+
 from google.protobuf.message import DecodeError
 from google.transit import gtfs_realtime_pb2 as rt
 
@@ -30,6 +32,17 @@ def _text(ts: rt.TranslatedString) -> str:
         if not t.language or t.language.startswith("en"):
             return str(t.text)
     return str(ts.translation[0].text)
+
+
+def _http_url(url: str) -> str:
+    """The URL if it's an absolute http(s) link, else "". Alert links end up as
+    hrefs in the web app, where a javascript: URL would run script."""
+    url = url.strip()
+    try:
+        parts = urlsplit(url)
+    except ValueError:
+        return ""
+    return url if parts.scheme.lower() in ("http", "https") and parts.netloc else ""
 
 
 def decode(feed: str, data: bytes) -> Snapshot:
@@ -103,7 +116,7 @@ def decode(feed: str, data: bytes) -> Snapshot:
                     id=entity.id,
                     header=_text(a.header_text),
                     description=_text(a.description_text),
-                    url=_text(a.url),
+                    url=_http_url(_text(a.url)),
                     cause=_enum(a, "cause"),
                     effect=_enum(a, "effect"),
                     active_periods=tuple(

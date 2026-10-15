@@ -2,6 +2,7 @@ import type { NextDeparture, StopDeparture } from "../api/types";
 import { NEARBY_COUNT, NEARBY_MAX_METRES, WALK_METRES_PER_MINUTE } from "../config";
 import { clock, plural, untilLabel } from "../lib/format";
 import { formatDistance, nearestStops } from "../lib/geo";
+import { httpUrl } from "../lib/url";
 import {
   departuresDoc, hiddenRoutes, liveDoc, locateState, now, routes, select, staticDoc, stops, timeZone,
   toggleRoute, userPosition,
@@ -175,7 +176,8 @@ export function ScheduleCheck() {
 // ---- Alerts ----
 
 export function Alerts() {
-  const alerts = liveDoc.value?.alerts ?? [];
+  // Only http(s) links: the server drops others, and a javascript: one would run script
+  const alerts = (liveDoc.value?.alerts ?? []).map((a) => ({ ...a, url: httpUrl(a.url) }));
   if (!alerts.length) return null;
   return (
     <Section title="Service alerts" id="alerts">

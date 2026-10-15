@@ -6,6 +6,7 @@ Ported from the prototype's scripts/build_gtfs.py.
 from __future__ import annotations
 
 import datetime as dt
+import re
 from collections import defaultdict
 
 from transitlive.domain.model import Departure, LatLon, Route, Stop, Timetable, Trip
@@ -13,10 +14,17 @@ from transitlive.domain.service_day import hms_to_secs
 from transitlive.gtfs.load import GtfsFeed
 
 WEEKDAYS = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
+_HEX_COLOR = re.compile(r"[0-9A-Fa-f]{6}")
 
 
 def _route_sort_key(short: str) -> tuple[int, str]:
     return (len(short), short)
+
+
+def _color(value: str | None, default: str) -> str:
+    """A GTFS colour as #RRGGBB, or the default if it isn't six hex digits.
+    The web app puts it in styles, so nothing else gets through."""
+    return "#" + (value if value and _HEX_COLOR.fullmatch(value) else default).upper()
 
 
 def compile_timetable(feed: GtfsFeed, default_timezone: str = "America/Vancouver") -> Timetable:
@@ -82,8 +90,8 @@ def compile_timetable(feed: GtfsFeed, default_timezone: str = "America/Vancouver
             id=r["route_id"],
             short=r.get("route_short_name", ""),
             long=r.get("route_long_name", ""),
-            color="#" + (r.get("route_color") or "666666").upper(),
-            text_color="#" + (r.get("route_text_color") or "FFFFFF").upper(),
+            color=_color(r.get("route_color"), "666666"),
+            text_color=_color(r.get("route_text_color"), "FFFFFF"),
             shapes=tuple(shape_coords[s] for s in route_shape_ids.get(r["route_id"], [])),
         )
         for r in sorted(feed.table("routes"), key=lambda r: _route_sort_key(r.get("route_short_name", "")))

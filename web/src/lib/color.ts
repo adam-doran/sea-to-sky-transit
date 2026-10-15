@@ -21,3 +21,9 @@ export function contrastRatio(a: string, b: string): number {
 export function badgeText(background: string): string {
   return contrastRatio(background, "#ffffff") >= contrastRatio(background, "#14181d") ? "#ffffff" : "#14181d";
 }
+
+/** The colour if it's #rrggbb, else the fallback. The server checks too; this
+ * keeps feed text out of styles even if it ever didn't. */
+export function hexColor(c: string, fallback: string): string {
+  return /^#[0-9a-f]{6}$/i.test(c) ? c : fallback;
+}

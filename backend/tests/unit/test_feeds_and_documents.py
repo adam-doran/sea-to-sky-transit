@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 from google.transit import gtfs_realtime_pb2 as rt
 
+from tests.builders import FeedBuilder
 from transitlive.api import schemas
 from transitlive.collector.archive import Archive
 from transitlive.collector.fetch import Backoff, Spacing
@@ -77,6 +78,71 @@ class TestDecode:
     def test_missing_header_is_rejected(self) -> None:
         with pytest.raises(FeedError):
             decode("vehicleupdates", b"")
+
+
+HOSTILE = '<img src=x onerror="alert(1)"><script>alert(2)</script>'
+
+
+def alerts_feed(*urls: str) -> bytes:
+    msg = rt.FeedMessage()
+    msg.header.gtfs_realtime_version = "2.0"
+    msg.header.timestamp = 1_792_000_000
+    for i, url in enumerate(urls):
+        entity = msg.entity.add(id=f"A{i}")
+        entity.alert.header_text.translation.add(text=HOSTILE, language="en")
+        if url:
+            entity.alert.url.translation.add(text=url, language="en")
+    return msg.SerializeToString()
+
+
+class TestFeedText:
+    """Upstream text the web app shows: route names stay as they are (the app
+    renders them as text), but colours and alert links are checked here."""
+
+    def test_route_names_pass_through_and_bad_colours_are_replaced(self) -> None:
+        tt = (
+            FeedBuilder()
+            .route("R1", HOSTILE, '00FF00" onmouseover="alert(1)', long=HOSTILE, text_color="FFF;}</style>")
+            .route("R2", "2", "url(https://evil.example/x)", text_color="")
+            .route("R3", "3", "a1b2c3", text_color="000000")
+            .route("R4", "4", "0000001", text_color=" 123456")
+            .build()
+        )
+        r1, r2, r3, r4 = (tt.routes[r] for r in ("R1", "R2", "R3", "R4"))
+        assert (r1.short, r1.long) == (HOSTILE, HOSTILE)
+        assert (r1.color, r1.text_color) == ("#666666", "#FFFFFF")
+        assert (r2.color, r2.text_color) == ("#666666", "#FFFFFF")
+        assert (r3.color, r3.text_color) == ("#A1B2C3", "#000000")
+        assert (r4.color, r4.text_color) == ("#666666", "#123456")  # CSV values are trimmed
+
+    def test_fixture_colours_are_kept(self) -> None:
+        colours = {r["color"] for rt_ in runtimes().values() for r in rt_.static_document()["routes"]}
+        assert colours - {"#666666"} and all(len(c) == 7 and c.startswith("#") for c in colours)
+
+    def test_only_http_alert_links_are_kept(self) -> None:
+        good = ["https://www.bctransit.com/whistler/alerts", "http://example.org/a?b=c#d", " https://x.example/ "]
+        bad = [
+            "javascript:alert(1)",
+            " JavaScript:alert(1)",
+            "java\tscript:alert(1)",
+            "data:text/html,<script>alert(1)</script>",
+            "vbscript:msgbox(1)",
+            "file:///etc/passwd",
+            "//evil.example",
+            "/relative",
+            "https:no-host",
+            "http://[::1",
+            "",
+        ]
+        snap = decode("alerts", alerts_feed(*good, *bad))
+        assert [a.url for a in snap.alerts] == [*(u.strip() for u in good), *[""] * len(bad)]
+        assert snap.alerts[0].header == HOSTILE
+
+    def test_live_document_has_no_script_links(self) -> None:
+        rt_ = runtimes()["squamish"]
+        rt_.apply(decode("alerts", alerts_feed("javascript:alert(1)", "https://example.org/")))
+        urls = [a["url"] for a in rt_.live_document(1_792_000_000)["alerts"]]
+        assert "javascript:alert(1)" not in urls and "https://example.org/" in urls
 
 
 class TestArchive:

@@ -1,6 +1,7 @@
 // Shared setup: the API's documents (so tests check the UI against the data
-// it was given), a browser clock frozen at the replayed feeds' time, and a
-// guard that fails any test that logs a console error.
+// it was given), a browser clock frozen at the replayed feeds' time, and
+// guards that fail any test that logs a console error or breaks the
+// Content-Security-Policy (vite preview serves the production one).
 import { test as base, expect, type Page } from "@playwright/test";
 import type { DeparturesDocument, LiveDocument, StaticDocument } from "../src/api/types";
 
@@ -32,7 +33,7 @@ export async function freezeClock(page: Page, live: LiveDocument, offsetSeconds 
   await page.clock.setFixedTime(new Date((live.generated_at + offsetSeconds) * 1000));
 }
 
-export const test = base.extend<{ squamish: SystemData; consoleErrors: string[] }>({
+export const test = base.extend<{ squamish: SystemData; consoleErrors: string[]; cspViolations: string[] }>({
   // Playwright fixtures must destructure their dependencies, even when there are none
   // eslint-disable-next-line no-empty-pattern
   squamish: async ({}, use) => {
@@ -47,6 +48,27 @@ export const test = base.extend<{ squamish: SystemData; consoleErrors: string[] 
       page.on("pageerror", (e) => errors.push(e.message));
       await use(errors);
       expect(errors, "console errors").toEqual([]);
+    },
+    { auto: true },
+  ],
+  cspViolations: [
+    async ({ page }, use) => {
+      const violations: string[] = [];
+      await page.exposeBinding("__cspViolation", (_source, v: string) => violations.push(v));
+      await page.addInitScript(() => {
+        document.addEventListener("securitypolicyviolation", (e) => {
+          const report = (window as unknown as { __cspViolation: (v: string) => void }).__cspViolation;
+          report(`${e.effectiveDirective} blocked ${e.blockedURI || "inline"} (${e.sourceFile}:${e.lineNumber})`);
+        });
+      });
+      // Every page must come with the policy, or there would be nothing to violate
+      page.on("response", (r) => {
+        if (r.request().isNavigationRequest() && !r.headers()["content-security-policy"]) {
+          violations.push(`no Content-Security-Policy on ${r.url()}`);
+        }
+      });
+      await use(violations);
+      expect(violations, "Content-Security-Policy violations").toEqual([]);
     },
     { auto: true },
   ],
