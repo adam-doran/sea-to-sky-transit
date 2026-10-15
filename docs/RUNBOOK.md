@@ -15,8 +15,9 @@ For volunteers running the service. One VPS, Docker Compose, a CDN in front.
 git clone https://github.com/<owner>/sea-to-sky-transit /opt/sea-to-sky-transit
 cd /opt/sea-to-sky-transit
 cp deploy/.env.example deploy/.env    # set DOMAIN, POSTGRES_PASSWORD, GITHUB_OWNER, IMAGE_TAG
-sudo mkdir -p /srv/transitlive/{postgres,archive,backups,web,tiles}
+sudo mkdir -p /srv/transitlive/{postgres,archive,backups,tiles}
 sudo chown 10001 /srv/transitlive/archive
+deploy/tiles/build.sh            # map tiles (~20 MB); needs the pmtiles CLI
 docker compose -f deploy/compose.yml --env-file deploy/.env up -d
 ```
 
@@ -35,6 +36,8 @@ docker compose -f deploy/compose.yml --env-file deploy/.env up -d
 ```
 
 Migrations run automatically (`migrate` runs before the collector and API start).
+
+Refresh the map tiles every month or two with `deploy/tiles/build.sh`.
 
 ## Monitoring
 

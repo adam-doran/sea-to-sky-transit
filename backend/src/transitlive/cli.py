@@ -29,6 +29,8 @@ def main(argv: list[str] | None = None) -> None:
     capture_p.add_argument("archive")
     capture_p.add_argument("--minutes", type=float, default=10)
 
+    sub.add_parser("openapi", help="print the API's OpenAPI schema (used to generate the web app's types)")
+
     api_p = sub.add_parser("api", help="serve the API")
     api_p.add_argument("--host", default="127.0.0.1")
     api_p.add_argument("--port", type=int, default=8000)
@@ -37,6 +39,7 @@ def main(argv: list[str] | None = None) -> None:
     logging.basicConfig(
         level=os.environ.get("LOG_LEVEL", "INFO"), format="%(asctime)s %(levelname)s %(name)s: %(message)s"
     )
+    logging.getLogger("alembic.runtime.plugins").setLevel(logging.WARNING)  # chatty at import time
     config = load_config(args.config)
 
     if args.command == "migrate":
@@ -68,6 +71,17 @@ def main(argv: list[str] | None = None) -> None:
 
         saved = asyncio.run(capture(config, Archive(args.archive), args.minutes))
         logging.info("saved %d snapshots to %s", saved, args.archive)
+
+    elif args.command == "openapi":
+        import json
+        import sys
+
+        from transitlive.api.app import create_app
+        from transitlive.db.engine import make_engine
+
+        # create_engine doesn't connect, so no database is needed here
+        json.dump(create_app(config, make_engine()).openapi(), sys.stdout, indent=2, sort_keys=True)
+        sys.stdout.write("\n")
 
     elif args.command == "api":
         import uvicorn

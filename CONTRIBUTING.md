@@ -5,7 +5,7 @@ bus, so changes need to keep it reliable and cheap to run.
 
 ## Set up
 
-You need [uv](https://docs.astral.sh/uv/) and Docker.
+You need [uv](https://docs.astral.sh/uv/), Docker and Node 24.
 
 ```bash
 make setup
@@ -32,7 +32,13 @@ backend/tests/
   unit/                    fast tests; builders.py makes tiny GTFS feeds in memory
   integration/             needs Docker
   fixtures/archive/        recorded real feeds, replayed by tests and make dev-replay
-deploy/                    Docker Compose, Caddy, backups
+web/src/
+  lib/                     pure, tested helpers: gliding along shapes, nearby stops, formatting
+  map/                     MapLibre: basemap, route lines, stops, bus markers
+  ui/                      the panel: near you, routes, schedule check, stop and bus details
+  api/                     client, plus types generated from the backend (make api-types)
+web/tests/                 Vitest unit tests
+deploy/                    Docker Compose, Caddy, backups, map tiles
 docs/                      architecture, data, runbook
 ```
 
@@ -48,6 +54,16 @@ docs/                      architecture, data, runbook
   route lines. Refresh them with `make fixtures` (keep them small: 10 minutes
   is plenty).
 - **Never call BC Transit from a test.** Use the fixtures or `httpx.MockTransport`.
+
+## The web app
+
+`make web-dev` serves it at http://localhost:5180 against the backend from
+`make dev`. Keep logic in `web/src/lib/` with tests; `make web-check` runs lint,
+types, tests and a build.
+
+If you change an API response, update `backend/src/transitlive/api/schemas.py`,
+then run `make api-types` and commit the regenerated types. CI fails if they
+don't match.
 
 ## Adding a transit system
 

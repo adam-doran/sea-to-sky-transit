@@ -1,7 +1,7 @@
 # Production, on one VPS. See docs/RUNBOOK.md.
 #   cp deploy/.env.example deploy/.env   (fill in DOMAIN, POSTGRES_PASSWORD, IMAGE_TAG)
 #   docker compose -f deploy/compose.yml --env-file deploy/.env up -d
-# Data lives under /srv/transitlive on the host: database, raw archive, backups, web build, map tiles.
+# Data lives under /srv/transitlive on the host: database, raw archive, backups, map tiles.
 
 name: sea-to-sky-transit
 
@@ -49,15 +49,14 @@ services:
     depends_on:
       migrate: { condition: service_completed_successfully }
 
-  caddy:
-    image: caddy:2.8-alpine
+  # Caddy with the web app built in (deploy/Dockerfile.web)
+  web:
+    image: ghcr.io/${GITHUB_OWNER:-change-me}/sea-to-sky-transit-web:${IMAGE_TAG:-latest}
     ports: ["80:80", "443:443"]
     environment:
       DOMAIN: ${DOMAIN:?set DOMAIN in deploy/.env}
     volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - /srv/transitlive/web:/srv/web:ro
-      - /srv/transitlive/tiles:/srv/tiles:ro
+      - /srv/transitlive/tiles:/srv/tiles:ro   # deploy/tiles/build.sh writes here
       - caddy_data:/data
     restart: unless-stopped
     depends_on: [api]

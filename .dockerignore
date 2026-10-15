@@ -1,0 +1,7 @@
+node_modules
+web/node_modules
+web/dist
+web/public/tiles
+backend/.venv
+**/__pycache__
+.git

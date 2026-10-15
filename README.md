@@ -1,11 +1,11 @@
-# Sea-to-Sky Transit Live
+# Layover (Sea-to-Sky Transit Live)
 
 Live bus locations, departures and service checks for Squamish, Whistler and
 Pemberton Valley, built on BC Transit's open data. An independent,
 volunteer-run project; not an official BC Transit service.
 
-**Status:** the backend (collector, archive, database and API) is working. The
-MapLibre web app is next; the original prototype lives on separately.
+**Status:** the backend (collector, archive, database and API) and the web app
+work locally. Not yet deployed; planned home: squamishbuses.ca.
 
 ## How it works
 
@@ -32,14 +32,17 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the details and
 
 ## Run it locally
 
-You need [uv](https://docs.astral.sh/uv/) and Docker.
+You need [uv](https://docs.astral.sh/uv/), Docker and Node 24.
 
 ```bash
-make setup        # install backend dependencies
-make test         # unit tests
-make dev-replay   # the full stack, replaying recorded feeds (no network)
-make dev          # the full stack, collecting from BC Transit
+make setup        # install backend and web dependencies
+make test         # backend unit tests
+make dev          # the backend stack, collecting from BC Transit
+make tiles        # map tiles for the web app (once; needs the pmtiles CLI)
+make web-dev      # the web app: http://localhost:5180
 ```
+
+`make dev-replay` runs the backend on recorded feeds instead (no network).
 
 Then open http://localhost:8100/docs for the API. The dev database listens on
 port 5433 (`postgresql://transitlive:transitlive@localhost:5433/transitlive`).

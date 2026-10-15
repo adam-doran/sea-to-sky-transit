@@ -32,10 +32,46 @@ jobs:
       - run: make setup
       - run: make test-integration
 
+  web:
+    name: Web app (lint, types, tests, build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
+  api-contract:
+    name: API types match the backend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: "0.11.14"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - run: make setup && (cd web && npm ci)
+      - run: make api-types
+      - name: Fail if the generated types changed
+        run: git diff --exit-code -- web/src/api || (echo "Run 'make api-types' and commit the result." && exit 1)
+
   image:
-    name: Build backend image
+    name: Build images
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - run: docker build -f backend/Dockerfile -t sea-to-sky-transit-backend:ci .
       - run: docker run --rm sea-to-sky-transit-backend:ci --help
+      - run: docker build -f deploy/Dockerfile.web -t sea-to-sky-transit-web:ci .
