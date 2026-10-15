@@ -46,7 +46,13 @@ if $update_sums; then
   exit 0
 fi
 
-(cd "$stage" && sha256 -c --quiet "$HERE/SHA256SUMS") || { echo "map assets failed their checksums" >&2; exit 1; }
+# Plain -c works with GNU coreutils, BusyBox (Alpine) and macOS shasum; only
+# the files that fail are shown.
+if ! result=$(cd "$stage" && sha256 -c "$HERE/SHA256SUMS" 2>&1); then
+  printf '%s\n' "$result" | grep -v ': OK$' >&2
+  echo "map assets failed their checksums" >&2
+  exit 1
+fi
 count=$(find "$stage" -type f | wc -l | tr -d ' ')
 expected=$(wc -l < "$HERE/SHA256SUMS" | tr -d ' ')
 [ "$count" = "$expected" ] || { echo "expected $expected files, got $count" >&2; exit 1; }
