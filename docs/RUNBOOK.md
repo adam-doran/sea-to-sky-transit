@@ -42,6 +42,10 @@ docker compose -f deploy/compose.yml --env-file deploy/.env up -d
 
 Migrations run automatically (`migrate` runs before the collector and API start).
 
+Releases (`git tag v0.1.0 && git push --tags`) publish images for amd64 and
+arm64 (e.g. AWS Graviton). Make both GHCR packages public once, under the
+repository's Packages, so servers can pull them without logging in.
+
 Refresh the map tiles every month or two with `deploy/tiles/build.sh`.
 
 Images from the release workflow link to their source code in the footer, as
