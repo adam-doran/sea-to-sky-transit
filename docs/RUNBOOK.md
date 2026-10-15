@@ -40,6 +40,10 @@ Migrations run automatically (`migrate` runs before the collector and API start)
 
 Refresh the map tiles every month or two with `deploy/tiles/build.sh`.
 
+Images from the release workflow link to their source code in the footer, as
+the AGPL requires. If you build the web image yourself, pass
+`--build-arg SOURCE_URL=https://github.com/<owner>/sea-to-sky-transit`.
+
 ## Monitoring
 
 Point an uptime checker (healthchecks.io, UptimeRobot) at `/api/health`. It

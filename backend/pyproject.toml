@@ -3,6 +3,8 @@ name = "transitlive"
 version = "0.1.0"
 description = "Collector, archive and API for BC Transit live data in the Sea-to-Sky corridor"
 requires-python = ">=3.13"
+license = "AGPL-3.0-or-later"
+license-files = ["../LICENSE"]
 dependencies = [
   "alembic>=1.13",
   "fastapi>=0.115",

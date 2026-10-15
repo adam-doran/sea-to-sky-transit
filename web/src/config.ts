@@ -11,6 +11,10 @@ export const MAP_ASSETS = "https://protomaps.github.io/basemaps-assets";
 // tests, so they need no tiles and no network.
 export const BASEMAP: "protomaps" | "none" = import.meta.env.VITE_BASEMAP === "none" ? "none" : "protomaps";
 
+// Where people can get this app's source code, as the AGPL requires for a
+// public service. Release builds set it to the exact version's repository.
+export const SOURCE_URL: string = import.meta.env.VITE_SOURCE_URL ?? "";
+
 export const POLL_MS = { live: 10_000, departures: 30_000 } as const;
 export const STALE_AFTER_SECONDS = 120; // show a warning when bus positions are older than this
 export const STOPS_MIN_ZOOM = 13.5;

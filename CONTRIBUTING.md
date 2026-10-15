@@ -3,6 +3,9 @@
 Thanks for helping. This project is run by volunteers for people who ride the
 bus, so changes need to keep it reliable and cheap to run.
 
+The project is licensed under the AGPLv3 or later; by contributing you agree
+your contributions are licensed the same way.
+
 ## Set up
 
 You need [uv](https://docs.astral.sh/uv/), Docker and Node 24.

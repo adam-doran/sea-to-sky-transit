@@ -1,5 +1,5 @@
 import { useState } from "preact/hooks";
-import { APP_NAME } from "../config";
+import { APP_NAME, SOURCE_URL } from "../config";
 import { agoLabel } from "../lib/format";
 import { liveDoc, loadError, now, selection, stale, switchSystem, system, systems } from "../state";
 import { BusDetails, StopDetails } from "./Details";
@@ -68,6 +68,11 @@ export function Panel() {
         <footer class="small muted">
           Unofficial and run by volunteers, using BC Transit's open data. For official information see{" "}
           <a href="https://www.bctransit.com" target="_blank" rel="noreferrer">bctransit.com</a>.
+          <span class="block">
+            Free software under the{" "}
+            <a href="/LICENSE.txt" target="_blank" rel="noreferrer">GNU AGPL</a>
+            {SOURCE_URL ? <>{" · "}<a href={SOURCE_URL} target="_blank" rel="noreferrer">Source code</a></> : null}.
+          </span>
         </footer>
       </div>
     </aside>

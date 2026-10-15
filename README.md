@@ -52,7 +52,14 @@ port 5433 (`postgresql://transitlive:transitlive@localhost:5433/transitlive`).
 Contributions are welcome. [CONTRIBUTING.md](CONTRIBUTING.md) explains the
 layout, the tests and how to add a transit system.
 
-## Data
+## Licence
 
-Transit data © BC Transit, from its [open data](https://www.bctransit.com/open-data/).
-For official information always check BC Transit.
+The code is free software under the [GNU Affero General Public License v3.0](LICENSE)
+or any later version. If you run a modified version as a public service, the AGPL
+requires you to offer its source code to the people using it; the web app links to
+its source (`SOURCE_URL` in `web/src/config.ts`) for that reason.
+
+Transit data, including the recorded feeds in `backend/tests/fixtures`, is
+© BC Transit, published as [open data](https://www.bctransit.com/open-data/), and
+isn't covered by the AGPL. Map data © OpenStreetMap contributors.
+For official transit information always check BC Transit.

@@ -15,6 +15,7 @@ COPY backend/pyproject.toml backend/uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
 COPY backend/src ./src
 COPY config /app/config
+COPY LICENSE /app/LICENSE
 RUN uv sync --frozen --no-dev
 
 RUN useradd --create-home --uid 10001 transitlive && mkdir -p /archive && chown transitlive /archive
