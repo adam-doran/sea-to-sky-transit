@@ -24,7 +24,7 @@ export default defineConfig({
     command: "npm run build && npx vite preview --port 4180 --strictPort",
     url: "http://localhost:4180",
     reuseExistingServer: !process.env.CI,
-    env: { VITE_BASEMAP: "none", LAYOVER_API: API },
+    env: { VITE_BASEMAP: "none", VITE_E2E: "1", LAYOVER_API: API },
     timeout: 120_000,
   },
 });

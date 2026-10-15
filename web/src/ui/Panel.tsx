@@ -1,7 +1,10 @@
 import { useState } from "preact/hooks";
 import { APP_NAME, SOURCE_URL } from "../config";
 import { agoLabel } from "../lib/format";
-import { liveDoc, loadError, now, selection, stale, switchSystem, system, systems } from "../state";
+import { THEME_PREFERENCES, type ThemePreference } from "../lib/theme";
+import {
+  liveDoc, loadError, now, selection, setThemePreference, stale, switchSystem, system, systems, themePreference,
+} from "../state";
 import { BusDetails, StopDetails } from "./Details";
 import { Alerts, Legend, NearYou, RouteList, ScheduleCheck } from "./Home";
 
@@ -29,6 +32,25 @@ function Banner() {
     text = "BC Transit's timetable has changed and is being updated. Some scheduled times may be wrong for a few minutes.";
   }
   return text ? <div class="banner" role="status">{text}</div> : null;
+}
+
+const THEME_LABELS: Record<ThemePreference, string> = { system: "Auto", light: "Light", dark: "Dark" };
+
+function ThemeSwitch() {
+  return (
+    <fieldset class="theme-switch">
+      <legend class="small muted">Appearance</legend>
+      <div class="segmented" role="radiogroup" aria-label="Appearance">
+        {THEME_PREFERENCES.map((pref) => (
+          <label key={pref} title={pref === "system" ? "Match this device's setting" : undefined}>
+            <input type="radio" name="theme" value={pref} checked={themePreference.value === pref}
+                   onChange={() => setThemePreference(pref)} />
+            <span class="option">{THEME_LABELS[pref]}</span>
+          </label>
+        ))}
+      </div>
+    </fieldset>
+  );
 }
 
 export function Panel() {
@@ -65,6 +87,7 @@ export function Panel() {
               <Legend />
             </>
           )}
+        <ThemeSwitch />
         <footer class="small muted">
           Unofficial and run by volunteers, using BC Transit's open data. For official information see{" "}
           <a href="https://www.bctransit.com" target="_blank" rel="noreferrer">bctransit.com</a>.

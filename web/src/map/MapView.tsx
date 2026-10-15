@@ -1,4 +1,4 @@
-import { effect } from "@preact/signals";
+import { effect, untracked } from "@preact/signals";
 import * as maplibregl from "maplibre-gl";
 import type { GeoJSONSource, LngLatBoundsLike } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
@@ -11,7 +11,7 @@ import { useEffect, useRef } from "preact/hooks";
 import { STOPS_MIN_ZOOM } from "../config";
 import { routeLines } from "../lib/routeLines";
 import {
-  hiddenRoutes, liveDoc, routes, select, selection, shapesByRoute, staticDoc, timeZone, userPosition,
+  hiddenRoutes, liveDoc, routes, select, selection, shapesByRoute, staticDoc, theme, timeZone, userPosition,
 } from "../state";
 import { BusMarkers } from "./buses";
 import { basemapStyle } from "./style";
@@ -45,27 +45,31 @@ export function MapView() {
       maplibregl.addProtocol("pmtiles", new Protocol().tile);
       protocolAdded = true;
     }
-    const dark = matchMedia("(prefers-color-scheme: dark)");
+    let currentTheme = theme.peek();
     const map = new maplibregl.Map({
       container: container.current!,
-      style: basemapStyle(dark.matches),
+      style: basemapStyle(currentTheme === "dark"),
       center: [-123.15, 49.72],
       zoom: 11,
       attributionControl: { compact: true },
     });
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
+    // End-to-end tests check where buses are drawn against the map's projection
+    if (import.meta.env.VITE_E2E) (window as unknown as { __map: maplibregl.Map }).__map = map;
     const buses = new BusMarkers(map, (id) => select({ kind: "bus", id }));
     const disposers: (() => void)[] = [];
     let fittedFor: string | null = null;
 
-    const addOverlays = () => {
+    // Our layers sit on top of the basemap. Changing theme swaps the basemap
+    // style, which drops them, so they're added again on every style load.
+    const addOverlays = (dark: boolean) => {
       map.addSource("routes", { type: "geojson", data: EMPTY });
       map.addSource("stops", { type: "geojson", data: EMPTY });
       map.addSource("you", { type: "geojson", data: EMPTY });
       map.addLayer({
         id: "route-casing", type: "line", source: "routes",
         layout: { "line-join": "round", "line-cap": "round" },
-        paint: { "line-color": dark.matches ? "#1b1f24" : "#ffffff", "line-width": LINE_WIDTH + 3,
+        paint: { "line-color": dark ? "#1b1f24" : "#ffffff", "line-width": LINE_WIDTH + 3,
                  "line-offset": ["*", ["get", "offset"], LINE_WIDTH] },
       });
       map.addLayer({
@@ -78,8 +82,8 @@ export function MapView() {
         id: "stops", type: "circle", source: "stops", minzoom: STOPS_MIN_ZOOM,
         paint: {
           "circle-radius": ["case", ["boolean", ["get", "selected"], false], 8, 5],
-          "circle-color": dark.matches ? "#1b1f24" : "#ffffff",
-          "circle-stroke-color": ["case", ["boolean", ["get", "selected"], false], "#1a73e8", dark.matches ? "#e7ebef" : "#2b3138"],
+          "circle-color": dark ? "#1b1f24" : "#ffffff",
+          "circle-stroke-color": ["case", ["boolean", ["get", "selected"], false], "#1a73e8", dark ? "#e7ebef" : "#2b3138"],
           "circle-stroke-width": ["case", ["boolean", ["get", "selected"], false], 3, 2],
         },
       });
@@ -90,73 +94,91 @@ export function MapView() {
                               "circle-stroke-width": 3 } });
     };
 
-    map.on("load", () => {
-      addOverlays();
+    const setData = (id: string, data: Parameters<GeoJSONSource["setData"]>[0]) => {
+      (map.getSource(id) as GeoJSONSource | undefined)?.setData(data);
+    };
 
-      // Route lines and stops follow the timetable and the route filter
-      disposers.push(effect(() => {
-        const doc = staticDoc.value;
-        const hidden = hiddenRoutes.value;
-        const selected = selection.value;
-        if (!doc) return;
-        (map.getSource("routes") as GeoJSONSource).setData(routeLines(doc, hidden));
-        (map.getSource("stops") as GeoJSONSource).setData({
-          type: "FeatureCollection",
-          features: doc.stops
-            .filter((s) => s.routes.some((r) => !hidden.has(r)))
-            .map((s) => ({
-              type: "Feature", id: s.id,
-              properties: { id: s.id, selected: selected?.kind === "stop" && selected.id === s.id },
-              geometry: { type: "Point", coordinates: [s.lon, s.lat] },
-            })),
-        });
-        if (fittedFor !== doc.system.slug && !selected) {
-          fittedFor = doc.system.slug;
-          const lats = doc.stops.map((s) => s.lat);
-          const lons = doc.stops.map((s) => s.lon);
-          const bounds: LngLatBoundsLike = [[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]];
-          map.fitBounds(bounds, { padding: panelPadding(), duration: 0 });
-        }
-      }));
+    // Route lines and stops follow the timetable, the route filter and the selection
+    const drawRoutesAndStops = () => {
+      const doc = staticDoc.value;
+      const hidden = hiddenRoutes.value;
+      const selected = selection.value;
+      if (!doc) return;
+      setData("routes", routeLines(doc, hidden));
+      setData("stops", {
+        type: "FeatureCollection",
+        features: doc.stops
+          .filter((s) => s.routes.some((r) => !hidden.has(r)))
+          .map((s) => ({
+            type: "Feature", id: s.id,
+            properties: { id: s.id, selected: selected?.kind === "stop" && selected.id === s.id },
+            geometry: { type: "Point", coordinates: [s.lon, s.lat] },
+          })),
+      });
+      if (fittedFor !== doc.system.slug && !selected) {
+        fittedFor = doc.system.slug;
+        const lats = doc.stops.map((s) => s.lat);
+        const lons = doc.stops.map((s) => s.lon);
+        const bounds: LngLatBoundsLike = [[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]];
+        map.fitBounds(bounds, { padding: panelPadding(), duration: 0 });
+      }
+    };
 
-      // Buses
-      disposers.push(effect(() => {
-        const live = liveDoc.value;
-        const sel = selection.value;
-        buses.update(live?.vehicles ?? [], routes.value, shapesByRoute.value, hiddenRoutes.value, timeZone.value,
-                     sel?.kind === "bus" ? sel.id : null);
-      }));
+    const drawYou = () => {
+      const pos = userPosition.value;
+      setData("you", pos ? {
+        type: "FeatureCollection",
+        features: [circlePolygon(pos.at, pos.accuracy),
+                   { type: "Feature", properties: {}, geometry: { type: "Point", coordinates: [pos.at[1], pos.at[0]] } }],
+      } : EMPTY);
+    };
 
-      // Your location
-      disposers.push(effect(() => {
-        const pos = userPosition.value;
-        (map.getSource("you") as GeoJSONSource).setData(pos ? {
-          type: "FeatureCollection",
-          features: [circlePolygon(pos.at, pos.accuracy),
-                     { type: "Feature", properties: {}, geometry: { type: "Point", coordinates: [pos.at[1], pos.at[0]] } }],
-        } : EMPTY);
-      }));
-
-      // Bring the selected stop or bus into view
-      let lastFocus = "";
-      disposers.push(effect(() => {
-        const sel = selection.value;
-        const doc = staticDoc.value;
-        if (!sel || !doc) return;
-        const key = `${sel.kind}:${sel.id}`;
-        if (key === lastFocus) return;
-        let target: [number, number] | null = null;
-        if (sel.kind === "stop") {
-          const stop = doc.stops.find((s) => s.id === sel.id);
-          if (stop) target = [stop.lon, stop.lat];
-        } else {
-          target = buses.position(sel.id);
-        }
-        if (!target) return;
-        lastFocus = key;
-        map.easeTo({ center: target, zoom: Math.max(map.getZoom(), 15), padding: panelPadding(), duration: 600 });
-      }));
+    map.on("style.load", () => {
+      addOverlays(currentTheme === "dark");
+      untracked(() => {
+        drawRoutesAndStops();
+        drawYou();
+      });
     });
+
+    disposers.push(effect(drawRoutesAndStops));
+    disposers.push(effect(drawYou));
+
+    // Switching theme swaps the basemap; style.load above puts our layers back
+    disposers.push(effect(() => {
+      const t = theme.value;
+      if (t === currentTheme) return;
+      currentTheme = t;
+      map.setStyle(basemapStyle(t === "dark"), { diff: false });
+    }));
+
+    // Buses
+    disposers.push(effect(() => {
+      const live = liveDoc.value;
+      const sel = selection.value;
+      buses.update(live?.vehicles ?? [], routes.value, shapesByRoute.value, hiddenRoutes.value, timeZone.value,
+                   sel?.kind === "bus" ? sel.id : null);
+    }));
+
+    // Bring the selected stop or bus into view
+    let lastFocus = "";
+    disposers.push(effect(() => {
+      const sel = selection.value;
+      const doc = staticDoc.value;
+      if (!sel || !doc) return;
+      const key = `${sel.kind}:${sel.id}`;
+      if (key === lastFocus) return;
+      let target: [number, number] | null = null;
+      if (sel.kind === "stop") {
+        const stop = doc.stops.find((s) => s.id === sel.id);
+        if (stop) target = [stop.lon, stop.lat];
+      } else {
+        target = buses.position(sel.id);
+      }
+      if (!target) return;
+      lastFocus = key;
+      map.easeTo({ center: target, zoom: Math.max(map.getZoom(), 15), padding: panelPadding(), duration: 600 });
+    }));
 
     map.on("click", "stops", (e) => {
       const id = e.features?.[0]?.properties?.id as string | undefined;

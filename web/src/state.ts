@@ -6,6 +6,7 @@ import { STALE_AFTER_SECONDS } from "./config";
 import { badgeText } from "./lib/color";
 import { buildPath, parsePath, type Selection } from "./lib/route";
 import { buildGeom, type ShapeGeom } from "./lib/shapes";
+import { loadPreference, resolveTheme, savePreference, type ThemePreference } from "./lib/theme";
 
 export const systems = signal<SystemInfo[]>([]);
 export const systemSlug = signal<string | null>(null);
@@ -21,6 +22,27 @@ export const now = signal(Date.now()); // ticks every few seconds for "x min ago
 export type LocateState = "off" | "finding" | "on" | "denied" | "unavailable";
 export const userPosition = signal<{ at: LatLon; accuracy: number } | null>(null);
 export const locateState = signal<LocateState>("off");
+
+// ---- theme ----
+
+const darkQuery = typeof matchMedia === "function" ? matchMedia("(prefers-color-scheme: dark)") : null;
+const safeStorage = (() => {
+  try {
+    return typeof localStorage === "undefined" ? undefined : localStorage;
+  } catch {
+    return undefined;
+  }
+})();
+
+export const themePreference = signal<ThemePreference>(loadPreference(safeStorage));
+export const systemDark = signal(darkQuery?.matches ?? false);
+darkQuery?.addEventListener("change", (e) => (systemDark.value = e.matches));
+export const theme = computed(() => resolveTheme(themePreference.value, systemDark.value));
+
+export function setThemePreference(pref: ThemePreference): void {
+  themePreference.value = pref;
+  savePreference(safeStorage, pref);
+}
 
 export const system = computed(() => systems.value.find((s) => s.slug === systemSlug.value) ?? null);
 export const timeZone = computed(() => system.value?.timezone ?? "America/Vancouver");

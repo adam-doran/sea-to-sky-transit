@@ -5,7 +5,7 @@ import { APP_NAME, DEFAULT_SYSTEM, POLL_MS } from "./config";
 import { MapView } from "./map/MapView";
 import {
   departuresDoc, liveDoc, liveError, loadError, now, readLocation, selection, staticDoc, stops, system, systemSlug,
-  systems,
+  systems, theme,
 } from "./state";
 import { Panel } from "./ui/Panel";
 
@@ -49,6 +49,13 @@ export function App() {
       stopLive();
       stopDeps();
     };
+  });
+
+  // The page's colours follow the theme
+  useSignalEffect(() => {
+    const t = theme.value;
+    document.documentElement.dataset.theme = t;
+    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", t === "dark" ? "#171c22" : "#0f3b5f");
   });
 
   // Page title follows what's on screen

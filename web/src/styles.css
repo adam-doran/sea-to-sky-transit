@@ -18,22 +18,21 @@
   color-scheme: light;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #171c22;
-    --surface: #222931;
-    --fg: #e8edf2;
-    --muted: #9eabb8;
-    --line: #313a44;
-    --accent: #7cb8ec;
-    --live: #5fd08d;
-    --warn-bg: #3a2f17;
-    --warn-line: #a97e1f;
-    --warn-fg: #f2c46d;
-    --danger: #f08b84;
-    --shadow: 0 6px 24px rgba(0, 0, 0, 0.5);
-    color-scheme: dark;
-  }
+/* The theme switch (or, by default, the device setting) sets data-theme on <html> */
+:root[data-theme="dark"] {
+  --bg: #171c22;
+  --surface: #222931;
+  --fg: #e8edf2;
+  --muted: #9eabb8;
+  --line: #313a44;
+  --accent: #7cb8ec;
+  --live: #5fd08d;
+  --warn-bg: #3a2f17;
+  --warn-line: #a97e1f;
+  --warn-fg: #f2c46d;
+  --danger: #f08b84;
+  --shadow: 0 6px 24px rgba(0, 0, 0, 0.5);
+  color-scheme: dark;
 }
 
 * { box-sizing: border-box; }
@@ -135,7 +134,9 @@ ul { list-style: none; margin: 0; padding: 0; }
 .link { border: 0; background: none; padding: 0; color: var(--accent); text-align: left; cursor: pointer; text-decoration: underline; }
 
 /* ---- bus markers ---- */
-.bus-marker { position: relative; width: 30px; height: 30px; padding: 0; border-radius: 50%; cursor: pointer;
+/* No `position` here: MapLibre positions map markers absolutely (.maplibregl-marker),
+   and overriding that puts each bus in the page flow, offset by the buses before it. */
+.bus-marker { width: 30px; height: 30px; padding: 0; border-radius: 50%; cursor: pointer;
   display: flex; align-items: center; justify-content: center; background: var(--route, #555); color: var(--route-text, #fff);
   border: 2px solid #fff; box-shadow: 0 1px 5px rgba(0, 0, 0, 0.45); font-weight: 700; font-size: 13px; }
 .bus-marker.selected { outline: 3px solid #1a73e8; outline-offset: 2px; }
@@ -145,7 +146,7 @@ ul { list-style: none; margin: 0; padding: 0; }
   border: 5px solid transparent; border-bottom: 7px solid var(--route, #555); border-top: 0; }
 .bus-depart { position: absolute; top: calc(100% + 3px); left: 50%; transform: translateX(-50%); padding: 1px 5px;
   border-radius: 4px; background: #16202b; color: #fff; font-size: 11px; white-space: nowrap; }
-.legend-bus { width: 22px; height: 22px; font-size: 11px; box-shadow: none; cursor: default; }
+.legend-bus { position: relative; width: 22px; height: 22px; font-size: 11px; box-shadow: none; cursor: default; }
 
 /* ---- map popups ---- */
 .road-popup { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: #16202b; }
@@ -162,3 +163,14 @@ ul { list-style: none; margin: 0; padding: 0; }
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }
 }
+
+/* ---- theme switch ---- */
+.theme-switch { display: flex; align-items: center; gap: 10px; margin: 14px 0 0; padding: 0; border: 0; }
+.theme-switch legend { float: left; margin-right: 10px; padding: 0; }
+.theme-switch .segmented { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.theme-switch label { position: relative; }
+.theme-switch input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.theme-switch span.option { display: block; padding: 4px 10px; font-size: 13px; color: var(--muted); }
+.theme-switch label + label span.option { border-left: 1px solid var(--line); }
+.theme-switch input:checked + span.option { background: var(--surface); color: var(--fg); font-weight: 600; }
+.theme-switch input:focus-visible + span.option { outline: 3px solid var(--accent); outline-offset: -3px; }

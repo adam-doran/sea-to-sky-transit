@@ -175,3 +175,39 @@ describe("route lines", () => {
       .toEqual([["R1", -0.5], ["R3", 0.5]]);
   });
 });
+
+describe("theme", () => {
+  it("resolves the preference against the device", async () => {
+    const { resolveTheme } = await import("../src/lib/theme");
+    expect(resolveTheme("system", true)).toBe("dark");
+    expect(resolveTheme("system", false)).toBe("light");
+    expect(resolveTheme("light", true)).toBe("light");
+    expect(resolveTheme("dark", false)).toBe("dark");
+  });
+  it("remembers choices and ignores junk", async () => {
+    const { loadPreference, savePreference, THEME_KEY } = await import("../src/lib/theme");
+    const store = new Map<string, string>();
+    const storage = {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => void store.set(k, v),
+      removeItem: (k: string) => void store.delete(k),
+    };
+    expect(loadPreference(storage)).toBe("system");
+    savePreference(storage, "dark");
+    expect(loadPreference(storage)).toBe("dark");
+    savePreference(storage, "system");
+    expect(store.has(THEME_KEY)).toBe(false);
+    store.set(THEME_KEY, "purple");
+    expect(loadPreference(storage)).toBe("system");
+  });
+  it("survives storage that throws (private windows, blocked storage)", async () => {
+    const { loadPreference, savePreference } = await import("../src/lib/theme");
+    const broken = {
+      getItem: () => { throw new Error("blocked"); },
+      setItem: () => { throw new Error("blocked"); },
+      removeItem: () => { throw new Error("blocked"); },
+    };
+    expect(loadPreference(broken)).toBe("system");
+    expect(() => savePreference(broken, "dark")).not.toThrow();
+  });
+});

@@ -46,6 +46,7 @@ export class BusMarkers {
         const el = document.createElement("button");
         el.type = "button";
         el.className = "bus-marker";
+        el.dataset.vehicle = v.id;
         el.addEventListener("click", (e) => {
           e.stopPropagation();
           this.onSelect(v.id);
