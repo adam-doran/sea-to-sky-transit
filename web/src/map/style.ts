@@ -30,6 +30,8 @@ export function basemapStyle(dark: boolean): StyleSpecification {
           '<a href="https://protomaps.com">Protomaps</a> © <a href="https://openstreetmap.org/copyright">OpenStreetMap</a>',
       },
     },
-    layers: layers("protomaps", namedFlavor(flavor), { lang: "en" }),
+    // Labels the basemap would set in italics (water, some addresses) use the
+    // regular face, so phones download one font fewer
+    layers: layers("protomaps", { ...namedFlavor(flavor), italic: "Noto Sans Regular" }, { lang: "en" }),
   };
 }

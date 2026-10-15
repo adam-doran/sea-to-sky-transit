@@ -69,6 +69,19 @@ docs/                      architecture, data, runbook
 `make dev`. Keep logic in `web/src/lib/` with tests; `make web-check` runs lint,
 types, tests and a build.
 
+Most people use it on a phone, standing at a stop, so design for that first:
+
+- The panel is a bottom sheet on phones (`src/ui/Panel.tsx`, `src/lib/sheet.ts`).
+  Selecting a stop or bus opens it; the collapsed sheet shows the nearest (or
+  last) stop and its next buses.
+- Keep tap targets at least 44px and form text at least 16px (iPhones zoom into
+  smaller text). The phone end-to-end tests (`e2e/phone.spec.ts`) check both.
+- The map (MapLibre, most of the code) loads after the panel. Its stylesheet
+  therefore comes later in the cascade, so scope overrides of it under `.map`.
+- `public/sw.js` lets the app open offline with the last data it saw. Bump its
+  `VERSION` if you change what it caches. Production builds only.
+- After editing `public/icons/icon.svg`, run `node scripts/icons.mjs` for the PNGs.
+
 If you change an API response, update `backend/src/transitlive/api/schemas.py`,
 then run `make api-types` and commit the regenerated types. CI fails if they
 don't match.

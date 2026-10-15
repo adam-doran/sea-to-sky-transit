@@ -11,7 +11,8 @@ import { useEffect, useRef } from "preact/hooks";
 import { STOPS_MIN_ZOOM } from "../config";
 import { routeLines } from "../lib/routeLines";
 import {
-  hiddenRoutes, liveDoc, routes, select, selection, shapesByRoute, staticDoc, theme, timeZone, userPosition,
+  hiddenRoutes, liveDoc, panelCover, phoneLayout, routes, select, selection, shapesByRoute, sheet, staticDoc, theme,
+  timeZone, userPosition,
 } from "../state";
 import { BusMarkers } from "./buses";
 import { roadPopup } from "./roadPopup";
@@ -22,9 +23,14 @@ const EMPTY = { type: "FeatureCollection" as const, features: [] };
 
 let protocolAdded = false;
 
+/** Fingers are wide: a tap this close to a stop counts as a tap on it. */
+const STOP_TAP_SLOP_PX = 22;
+const ROUTE_TAP_SLOP_PX = 10;
+
+/** Keep fitted and focused things clear of the panel, wherever it stands. */
 function panelPadding(): maplibregl.PaddingOptions {
-  const wide = innerWidth > 720;
-  return { top: 40, right: 40, bottom: wide ? 40 : innerHeight * 0.35, left: wide ? 400 : 30 };
+  const cover = panelCover.peek();
+  return { top: 40, right: 40, bottom: 40 + cover.bottom, left: cover.left ? cover.left + 40 : 30 };
 }
 
 function circlePolygon([lat, lon]: [number, number], metres: number) {
@@ -53,7 +59,14 @@ export function MapView() {
       center: [-123.15, 49.72],
       zoom: 11,
       attributionControl: { compact: true },
+      // A transit map stays north-up and flat: a twisted pinch would otherwise
+      // leave it rotated, with no compass to put it back
+      dragRotate: false,
+      pitchWithRotate: false,
+      touchPitch: false,
     });
+    map.touchZoomRotate.disableRotation();
+    map.keyboard.disableRotation();
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
     // End-to-end tests check where buses are drawn against the map's projection
     if (import.meta.env.VITE_E2E) (window as unknown as { __map: maplibregl.Map }).__map = map;
@@ -161,14 +174,15 @@ export function MapView() {
                    sel?.kind === "bus" ? sel.id : null);
     }));
 
-    // Bring the selected stop or bus into view
+    // Bring the selected stop or bus into view, clear of the panel; again
+    // whenever the panel changes size (a sheet raised over it, say)
     let lastFocus = "";
-    disposers.push(effect(() => {
+    const focus = (force: boolean) => {
       const sel = selection.value;
       const doc = staticDoc.value;
       if (!sel || !doc) return;
       const key = `${sel.kind}:${sel.id}`;
-      if (key === lastFocus) return;
+      if (key === lastFocus && !force) return;
       let target: [number, number] | null = null;
       if (sel.kind === "stop") {
         const stop = doc.stops.find((s) => s.id === sel.id);
@@ -179,18 +193,38 @@ export function MapView() {
       if (!target) return;
       lastFocus = key;
       map.easeTo({ center: target, zoom: Math.max(map.getZoom(), 15), padding: panelPadding(), duration: 600 });
+    };
+    disposers.push(effect(() => focus(false)));
+    disposers.push(effect(() => {
+      if (panelCover.value) untracked(() => focus(true));
     }));
 
-    map.on("click", "stops", (e) => {
-      const id = e.features?.[0]?.properties?.id as string | undefined;
-      if (id) select({ kind: "stop", id });
-    });
-    map.on("click", "route-line", (e) => {
-      if (map.queryRenderedFeatures(e.point, { layers: ["stops"] }).length) return;
-      const ids = String(e.features?.[0]?.properties?.routes ?? "").split(",").filter(Boolean);
+    // One handler for taps on the map, with room for fingers: the nearest stop
+    // within reach, else a route line, else (on phones) lower the sheet
+    const near = (p: maplibregl.Point, slop: number): [maplibregl.PointLike, maplibregl.PointLike] =>
+      [[p.x - slop, p.y - slop], [p.x + slop, p.y + slop]];
+    map.on("click", (e) => {
+      const stopsHere = map.getLayer("stops") ? map.queryRenderedFeatures(near(e.point, STOP_TAP_SLOP_PX), { layers: ["stops"] }) : [];
+      let best: { id: string; d: number } | null = null;
+      for (const f of stopsHere) {
+        if (f.geometry.type !== "Point") continue;
+        const at = map.project(f.geometry.coordinates as [number, number]);
+        const d = Math.hypot(at.x - e.point.x, at.y - e.point.y);
+        const id = f.properties?.id as string | undefined;
+        if (id && (!best || d < best.d)) best = { id, d };
+      }
+      if (best) {
+        select({ kind: "stop", id: best.id });
+        return;
+      }
+      const line = map.getLayer("route-line") ? map.queryRenderedFeatures(near(e.point, ROUTE_TAP_SLOP_PX), { layers: ["route-line"] })[0] : undefined;
+      const ids = String(line?.properties?.routes ?? "").split(",").filter(Boolean);
       const names = ids.map((id) => routes.value.get(id)).filter((r) => r != null);
-      if (!names.length) return;
-      new maplibregl.Popup({ closeButton: true, maxWidth: "260px" }).setLngLat(e.lngLat).setDOMContent(roadPopup(names)).addTo(map);
+      if (names.length) {
+        new maplibregl.Popup({ closeButton: true, maxWidth: "260px" }).setLngLat(e.lngLat).setDOMContent(roadPopup(names)).addTo(map);
+        return;
+      }
+      if (phoneLayout.peek() && sheet.peek() !== "peek") sheet.value = "peek";
     });
     for (const layer of ["stops", "route-line"]) {
       map.on("mouseenter", layer, () => (map.getCanvas().style.cursor = "pointer"));

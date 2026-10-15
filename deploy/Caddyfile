@@ -33,6 +33,10 @@
 		root * /srv/web
 		try_files {path} /index.html
 		header /index.html Cache-Control "no-cache"
+		# The offline worker must always be checked for a new version
+		header /sw.js Cache-Control "no-cache"
+		header /manifest.webmanifest Cache-Control "public, max-age=86400"
+		header /icons/* Cache-Control "public, max-age=604800"
 		file_server
 	}
 

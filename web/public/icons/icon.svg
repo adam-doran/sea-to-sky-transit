@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Layover: a bus front on BC Transit navy. Everything that matters sits in the
+       central circle that Android keeps when it crops a maskable icon. -->
+  <rect width="512" height="512" fill="#0f3b5f"/>
+  <rect x="150" y="112" width="212" height="262" rx="36" fill="#ffffff"/>
+  <rect x="178" y="138" width="156" height="30" rx="8" fill="#8cc63f"/>
+  <rect x="172" y="186" width="168" height="98" rx="14" fill="#0f3b5f"/>
+  <circle cx="202" cy="328" r="17" fill="#0f3b5f"/>
+  <circle cx="310" cy="328" r="17" fill="#0f3b5f"/>
+  <rect x="172" y="370" width="44" height="34" rx="10" fill="#ffffff"/>
+  <rect x="296" y="370" width="44" height="34" rx="10" fill="#ffffff"/>
+</svg>

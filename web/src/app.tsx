@@ -1,13 +1,32 @@
 import { useSignalEffect } from "@preact/signals";
-import { useEffect } from "preact/hooks";
+import type { FunctionComponent } from "preact";
+import { useEffect, useRef, useState } from "preact/hooks";
 import { api, poll } from "./api/client";
 import { APP_NAME, DEFAULT_SYSTEM, POLL_MS } from "./config";
-import { MapView } from "./map/MapView";
+import { locateIfAllowed } from "./locate";
 import {
-  departuresDoc, liveDoc, liveError, loadError, now, readLocation, selection, staticDoc, stops, system, systemSlug,
-  systems, theme,
+  departuresDoc, liveDoc, liveError, loadError, now, online, readLocation, rememberStop, selection, staticDoc, stops,
+  system, systemSlug, systems, theme,
 } from "./state";
 import { Panel } from "./ui/Panel";
+
+/** The map is most of the app's code (MapLibre). Loading it separately lets
+ *  the panel, and the departures someone came for, appear first. With no
+ *  signal it waits: there'd be no map tiles to show, and the panel works from
+ *  the offline copy. */
+function LazyMap() {
+  const [MapComponent, setMapComponent] = useState<FunctionComponent | null>(null);
+  const requested = useRef(false);
+  useSignalEffect(() => {
+    if (!online.value || requested.current) return;
+    requested.current = true;
+    import("./map/MapView").then((m) => setMapComponent(() => m.MapView)).catch(() => {
+      requested.current = false;
+      loadError.value = "Couldn't load the map. Departures still work; reload to try again.";
+    });
+  });
+  return MapComponent ? <MapComponent /> : <div class="map map-loading" role="region" aria-label="Map of buses, routes and stops" aria-busy="true" />;
+}
 
 export function App() {
   // Systems, the URL, and the clock tick
@@ -20,6 +39,7 @@ export function App() {
     const onPop = () => readLocation(DEFAULT_SYSTEM);
     addEventListener("popstate", onPop);
     const tick = setInterval(() => (now.value = Date.now()), 5_000);
+    void locateIfAllowed();
     return () => {
       removeEventListener("popstate", onPop);
       clearInterval(tick);
@@ -58,6 +78,12 @@ export function App() {
     document.querySelector('meta[name="theme-color"]')?.setAttribute("content", t === "dark" ? "#171c22" : "#0f3b5f");
   });
 
+  // Remember the last stop opened, so it's offered first next time
+  useSignalEffect(() => {
+    const sel = selection.value;
+    if (sel?.kind === "stop" && stops.value.has(sel.id)) rememberStop(sel.id);
+  });
+
   // Page title follows what's on screen
   useSignalEffect(() => {
     const sel = selection.value;
@@ -68,7 +94,7 @@ export function App() {
 
   return (
     <>
-      <MapView />
+      <LazyMap />
       <Panel />
     </>
   );
