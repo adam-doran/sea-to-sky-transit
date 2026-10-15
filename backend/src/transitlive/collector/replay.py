@@ -2,16 +2,18 @@
 
 Used by tests, the end-to-end test stack and local development without
 network access. The archive layout is the collector's own, so any slice of the
-production archive (or tests/fixtures/archive) can be replayed.
+production archive (or tests/fixtures/archive) can be replayed, from
+individual files, daily bundles, or both.
 """
 
 from __future__ import annotations
 
 import asyncio
+import datetime as dt
 import heapq
 import logging
-from collections.abc import Iterator
-from dataclasses import dataclass
+from collections.abc import Callable, Iterator
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from sqlalchemy import Engine
@@ -21,6 +23,7 @@ from transitlive.collector.fetch import FetchResult
 from transitlive.collector.realtime import decode
 from transitlive.collector.service import Collector
 from transitlive.config import REALTIME_FEEDS, Config
+from transitlive.db.engine import ensure_partitions
 
 log = logging.getLogger("transitlive.replay")
 
@@ -29,18 +32,18 @@ class ArchiveFetcher:
     """Stands in for BC Transit: serves each system's newest archived timetable."""
 
     def __init__(self, config: Config, archive: Archive) -> None:
-        self.by_url = {}
+        self.by_url: dict[str, tuple[str, Callable[[], bytes]]] = {}
         for system in config.systems:
-            zips = list(archive.iter_static(system.slug))
-            if zips:
-                self.by_url[config.collector.static(system)] = zips[-1]
+            found = archive.latest_static(system.slug)
+            if found is not None:
+                self.by_url[config.collector.static(system)] = found
 
     async def get(self, url: str) -> FetchResult:
-        path = self.by_url.get(url)
-        if path is None:
+        found = self.by_url.get(url)
+        if found is None:
             return FetchResult(url, 404, None, None, 0, "HTTP 404")
-        data = path.read_bytes()
-        return FetchResult(url, 200, data, path.stem.split("_")[-1], 0)
+        name, load = found
+        return FetchResult(url, 200, load(), name.removesuffix(".zip").split("_")[-1], 0)
 
     async def aclose(self) -> None:
         pass
@@ -51,12 +54,12 @@ class Event:
     timestamp: int
     slug: str
     feed: str
-    path: Path
+    data: bytes = field(compare=False, repr=False)
 
 
 def _stream(archive: Archive, slug: str, feed: str) -> Iterator[Event]:
-    for ts, path in archive.iter_realtime(slug, feed):
-        yield Event(ts, slug, feed, path)
+    for ts, data in archive.snapshots(slug, feed):
+        yield Event(ts, slug, feed, data)
 
 
 def events(config: Config, archive: Archive) -> Iterator[Event]:
@@ -85,10 +88,16 @@ class Replayer:
             raise SystemExit(f"nothing to replay in {self.archive.root}")
         self.now = first.timestamp
         await self.collector.prepare()
+        # History older than the collector's own partitions (a rebuild from
+        # bundles) gets monthly partitions too, not the DEFAULT one
+        first_day = dt.datetime.fromtimestamp(first.timestamp, dt.UTC).date()
+        today = dt.datetime.now(dt.UTC).date()
+        months = max(0, (today.year - first_day.year) * 12 + today.month - first_day.month)
+        await asyncio.to_thread(ensure_partitions, self.collector.engine, first_day, months + 2)
 
     async def step(self, event: Event) -> None:
         self.now = event.timestamp
-        snap = decode(event.feed, Archive.read(event.path))
+        snap = decode(event.feed, event.data)
         await self.collector.ingest(event.slug, snap)
 
     async def run(self, speed: float = 1.0, loop: bool = False) -> int:

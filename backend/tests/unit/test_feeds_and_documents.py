@@ -14,7 +14,7 @@ from transitlive.collector.archive import Archive
 from transitlive.collector.fetch import Backoff, Spacing
 from transitlive.collector.realtime import FeedError, decode
 from transitlive.collector.replay import events
-from transitlive.config import load_config
+from transitlive.config import REALTIME_FEEDS, load_config
 from transitlive.gtfs.compile import compile_timetable
 from transitlive.gtfs.load import read_gtfs_zip
 from transitlive.live.runtime import MISMATCH_STRIKES, SystemRuntime
@@ -36,11 +36,17 @@ class TestDecode:
     def test_every_archived_snapshot_decodes(self) -> None:
         seen = set()
         for event in events(CONFIG, ARCHIVE):
-            snap = decode(event.feed, Archive.read(event.path))
+            snap = decode(event.feed, event.data)
             assert snap.header_timestamp == event.timestamp
-            assert event.path.parts[-3] == event.feed and event.path.parts[-4] == event.slug
-            seen.add((event.slug, event.feed))
-        assert len(seen) == 9  # every system and feed is labelled correctly
+            seen.add((event.slug, event.feed, event.timestamp))
+        on_disk = {
+            (s.slug, feed, ts)
+            for s in CONFIG.systems
+            for feed in REALTIME_FEEDS
+            for ts, _ in ARCHIVE.iter_realtime(s.slug, feed)
+        }
+        assert seen == on_disk  # every snapshot, labelled with its own system and feed
+        assert len({(slug, feed) for slug, feed, _ in seen}) == 9
 
     def test_vehicle_fields(self) -> None:
         _ts, path = next(ARCHIVE.iter_realtime("squamish", "vehicleupdates"))
@@ -114,7 +120,7 @@ class TestDocuments:
         built = 0
         for event in events(CONFIG, ARCHIVE):
             rt_ = rts[event.slug]
-            rt_.apply(decode(event.feed, Archive.read(event.path)))
+            rt_.apply(decode(event.feed, event.data))
             if event.feed == "vehicleupdates":
                 schemas.LiveDocument.model_validate(rt_.live_document(event.timestamp))
                 built += 1
@@ -134,7 +140,7 @@ class TestDocuments:
             if event.feed != "vehicleupdates":
                 continue
             rt_ = rts[event.slug]
-            rt_.apply(decode(event.feed, Archive.read(event.path)))
+            rt_.apply(decode(event.feed, event.data))
             for vid, track in rt_.tracks.items():
                 if track is None:
                     last.pop(vid, None)

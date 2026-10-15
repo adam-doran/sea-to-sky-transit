@@ -80,5 +80,13 @@ app to show a warning.
 
 On start the collector restores each system's active timetable from the
 archive, so it doesn't depend on BC Transit being reachable. The whole
-database can be rebuilt from the raw archive with `transitlive replay`;
-inserts are idempotent.
+database can be rebuilt from the raw archive with `transitlive replay`, from
+snapshot files, daily bundles or both; inserts are idempotent.
+
+## Nightly maintenance
+
+Shortly after midnight UTC the collector packs the previous day into one
+compressed bundle per system, uploads it to S3 if configured, deletes snapshot
+files once they're three days old and safely bundled, and drops monthly
+history partitions older than 90 days whose every day is bundled. Details in
+[DATA.md](DATA.md); setup and restores in [RUNBOOK.md](RUNBOOK.md).

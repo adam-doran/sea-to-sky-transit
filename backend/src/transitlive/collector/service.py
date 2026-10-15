@@ -17,12 +17,14 @@ from dataclasses import dataclass, field
 
 from sqlalchemy import Engine
 
+from transitlive.collector import bundles
 from transitlive.collector.archive import Archive
+from transitlive.collector.bundles import S3Store
 from transitlive.collector.fetch import Backoff, Fetcher, Spacing
 from transitlive.collector.realtime import FeedError, decode
 from transitlive.config import REALTIME_FEEDS, Config, System
 from transitlive.db import store
-from transitlive.db.engine import ensure_partitions
+from transitlive.db.engine import drop_old_partitions, ensure_partitions
 from transitlive.domain.model import Snapshot, Timetable
 from transitlive.domain.service_day import local_date
 from transitlive.gtfs.compile import compile_timetable
@@ -32,6 +34,10 @@ from transitlive.live.runtime import SystemRuntime
 log = logging.getLogger("transitlive.collector")
 
 FORCED_SYNC_COOLDOWN_SECONDS = 15 * 60
+# Maintenance runs every six hours from shortly after midnight UTC, when the
+# previous day's last snapshots (whose feed timestamps can lag) are in.
+MAINTENANCE_PERIOD_SECONDS = 6 * 3600
+MAINTENANCE_OFFSET_SECONDS = 10 * 60
 START_STAGGER_SECONDS = 1.1
 DOCS_FOR_FEED = {
     "vehicleupdates": ("live",),
@@ -46,6 +52,12 @@ def covers(tt: Timetable, now: float) -> bool:
     if today in tt.services:
         return True
     return bool(tt.start_date and tt.end_date and tt.start_date <= today <= tt.end_date)
+
+
+def seconds_until_maintenance(now: float) -> float:
+    """Seconds until the next 00:10, 06:10, 12:10 or 18:10 UTC."""
+    since = (now - MAINTENANCE_OFFSET_SECONDS) % MAINTENANCE_PERIOD_SECONDS
+    return MAINTENANCE_PERIOD_SECONDS - since
 
 
 @dataclass
@@ -67,13 +79,17 @@ class Collector:
         archive: Archive,
         fetcher: Fetcher,
         clock: Callable[[], float] = time.time,
+        s3: S3Store | None = None,
     ) -> None:
         self.config = config
         self.engine = engine
         self.archive = archive
         self.fetcher = fetcher
         self.clock = clock
-        self.tasks = {s.slug: SystemTask(s) for s in config.systems}
+        threshold = config.collector.prediction_threshold_seconds
+        self.tasks = {s.slug: SystemTask(s, deduper=store.PredictionDeduper(threshold)) for s in config.systems}
+        self.s3 = s3
+        self.archive_maintained: dt.date | None = None
 
     # ---- startup ----
 
@@ -94,7 +110,7 @@ class Collector:
             return
         version_id, path = found
         try:
-            data = await asyncio.to_thread(Archive.read, self.archive.root / path)
+            data = await asyncio.to_thread(self.archive.load, path)
         except FileNotFoundError:
             log.warning("%s: active timetable %s missing from the archive", task.system.slug, path)
             return
@@ -270,11 +286,47 @@ class Collector:
 
     async def _maintenance_loop(self) -> None:
         while True:
-            await asyncio.sleep(6 * 3600)
+            await asyncio.sleep(seconds_until_maintenance(self.clock()))
+            await self.maintain()
+
+    async def maintain(self) -> None:
+        """Every six hours: create partitions ahead. Once a day, shortly after
+        midnight UTC (or on the first run after a missed night): bundle
+        finished days, upload them, trim local files and old history."""
+        today = dt.datetime.fromtimestamp(self.clock(), dt.UTC).date()
+        try:
+            await asyncio.to_thread(ensure_partitions, self.engine, today)
+        except Exception:
+            log.exception("partition maintenance failed")
+        if self.archive_maintained == today:
+            return
+        self.archive_maintained = today
+        settings = self.config.archive
+        try:
+            summary = await asyncio.to_thread(
+                bundles.maintain, self.archive, list(self.tasks), settings, today, self.s3
+            )
+            log.info(
+                "archive: %d days bundled, %d uploaded, %d snapshot files deleted, %d errors",
+                len(summary.bundled),
+                summary.uploaded,
+                summary.deleted_files,
+                summary.errors,
+            )
+        except Exception:
+            log.exception("archive maintenance failed")
+        if settings.database_days:
+            slugs = list(self.tasks)
             try:
-                await asyncio.to_thread(ensure_partitions, self.engine, dt.datetime.now(dt.UTC).date())
+                await asyncio.to_thread(
+                    drop_old_partitions,
+                    self.engine,
+                    today,
+                    settings.database_days,
+                    lambda day: self.archive.has_bundles(slugs, day),
+                )
             except Exception:
-                log.exception("partition maintenance failed")
+                log.exception("history retention failed")
 
     async def run(self) -> None:
         await self.prepare()

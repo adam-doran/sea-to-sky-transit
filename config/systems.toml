@@ -9,6 +9,9 @@ realtime_url = "https://bct.tmix.se/gtfs-realtime/{feed}.pb?operatorIds={operato
 static_url = "https://bct.tmix.se/Tmix.Cap.TdExport.WebApi/gtfs/?operatorIds={operator}"
 timeout_seconds = 10
 static_sync_hours = 6
+# stop_predictions stores a new row only when a predicted time moves at least
+# this much (or a stop or trip is skipped, cancelled, etc.)
+prediction_threshold_seconds = 30
 
 # How often each realtime feed is fetched, per system, in seconds.
 # 3 systems x (6 + 2 + 1) requests/minute = 27 requests/minute in total.
@@ -16,6 +19,22 @@ static_sync_hours = 6
 vehicleupdates = 10
 tripupdates = 30
 alerts = 60
+
+# Long-term storage (docs/DATA.md). Each night the collector packs the previous
+# UTC day into archive/bundles/{system}/{YYYY-MM-DD}.tar.zst, uploads it to S3
+# if a bucket is set, then trims what's kept locally and in the database.
+[archive]
+# Individual snapshot files are deleted this many days after their day has a
+# verified (and, with S3, uploaded) bundle.
+keep_snapshot_days = 3
+# Monthly partitions of vehicle_positions and stop_predictions are dropped once
+# the whole month is older than this, if every day of it has bundles. 0 = never.
+database_days = 90
+# Optional. Uses the instance's IAM role; never put keys here. Can also be set
+# with TRANSITLIVE_S3_BUCKET, TRANSITLIVE_S3_PREFIX and TRANSITLIVE_S3_REGION.
+# s3_bucket = "layover-archive"
+# s3_prefix = "bundles/"
+# s3_region = "ca-central-1"
 
 [[systems]]
 slug = "squamish"

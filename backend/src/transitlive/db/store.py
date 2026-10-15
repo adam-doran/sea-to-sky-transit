@@ -314,11 +314,31 @@ def insert_vehicle_positions(
 
 
 class PredictionDeduper:
-    """Remembers the last prediction per (trip, start date, stop), so only
-    changes are stored. After a restart the first fetch is stored in full."""
+    """Remembers the last stored prediction per (trip, start date, stop), so
+    only meaningful changes are stored: a predicted time (or delay) moving by
+    at least `threshold_seconds`, or a schedule relationship changing. The
+    first observation of each key is always stored, so after a restart the
+    first fetch is stored in full."""
 
-    def __init__(self) -> None:
+    def __init__(self, threshold_seconds: float = 30) -> None:
+        self.threshold = threshold_seconds
         self.last: dict[tuple[str, str, str], tuple[Any, ...]] = {}
+
+    def _moved(self, old: tuple[Any, ...], new: tuple[Any, ...]) -> bool:
+        if len(old) != len(new):
+            return True
+        if len(new) == 1:  # trip-level row: (trip relationship,)
+            return old != new
+        *old_times, old_rel, old_trip_rel = old
+        *new_times, new_rel, new_trip_rel = new
+        if (old_rel, old_trip_rel) != (new_rel, new_trip_rel):
+            return True
+        for a, b in zip(old_times, new_times, strict=True):
+            if (a is None) != (b is None):
+                return True
+            if a is not None and abs(b - a) >= self.threshold:
+                return True
+        return False
 
     def changed_rows(self, system_id: int, snap: Snapshot, trip_dates: dict[str, str]) -> list[dict[str, Any]]:
         rows = []
@@ -338,7 +358,8 @@ class PredictionDeduper:
                     if stu is None
                     else (stu.arrival_time, stu.departure_time, stu.delay, stu.relationship, tu.relationship)
                 )
-                if self.last.get(key) == value:
+                previous = self.last.get(key)
+                if previous is not None and not self._moved(previous, value):
                     continue
                 self.last[key] = value
                 rows.append(_prediction_row(system_id, snap.header_timestamp, tu, start_date, stop_key, stu))

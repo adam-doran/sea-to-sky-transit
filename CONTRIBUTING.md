@@ -27,7 +27,7 @@ backend/src/transitlive/
   domain/                  pure logic, no I/O: service days, departures, waiting buses,
                            schedule check, shape tracking, shared-road runs
   gtfs/                    read and compile static timetables
-  collector/               fetch, decode, archive, ingest; replay and capture
+  collector/               fetch, decode, archive, ingest; daily bundles; replay and capture
   live/runtime.py          per-system state -> the documents the API serves
   db/                      tables, migrations, queries
   api/                     FastAPI app and response schemas (the web app's contract)
