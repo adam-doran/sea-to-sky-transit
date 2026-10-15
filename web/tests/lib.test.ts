@@ -3,7 +3,7 @@ import type { StaticDocument, Vehicle } from "../src/api/types";
 import { badgeText, contrastRatio } from "../src/lib/color";
 import { agoLabel, clock, delayLabel, untilLabel } from "../src/lib/format";
 import { distanceMetres, formatDistance, nearestStops } from "../src/lib/geo";
-import { DEFAULT_GLIDE_MS, glideDuration, isMoving, planGlide, positionAt } from "../src/lib/glide";
+import { DEFAULT_GLIDE_MS, glideDuration, isCatchUp, isMoving, planGlide, positionAt } from "../src/lib/glide";
 import { buildPath, parsePath } from "../src/lib/route";
 import { routeLines } from "../src/lib/routeLines";
 import { buildGeom, pointAlong } from "../src/lib/shapes";
@@ -209,5 +209,36 @@ describe("theme", () => {
     };
     expect(loadPreference(broken)).toBe("system");
     expect(() => savePreference(broken, "dark")).not.toThrow();
+  });
+});
+
+describe("catching up after the page was in the background", () => {
+  const at = (distance: number, timestamp: number) =>
+    vehicle({ timestamp, track: { shape_index: 0, distance_along: distance, lat: 0, lon: 0, glide: true } });
+  const LONG = buildGeom({ coords: [[49.7, -123.15], [49.75, -123.15]], length_m: 5560, closed: false });
+  const shapes = new Map([["R1", [LONG]]]);
+
+  it("glides normal movement between reports", () => {
+    const a = planGlide(undefined, at(1000, 1000), shapes, 0);
+    const b = planGlide(a, at(1150, 1015), shapes, 20_000); // 150 m in 15 s
+    expect(b.duration).toBeGreaterThan(0);
+    expect([b.from, b.to]).toEqual([1000, 1150]);
+  });
+
+  it("jumps when the reports are minutes apart (the tab was hidden)", () => {
+    const a = planGlide(undefined, at(1000, 1000), shapes, 0);
+    const b = planGlide(a, at(1500, 1000 + 5 * 60), shapes, 400_000); // 5 minutes later, only 500 m on
+    expect(b.duration).toBe(0);
+    expect(positionAt(b, 400_000)).toEqual(positionAt(b, 400_001)); // already there
+    expect(b.from).toBe(1500);
+  });
+
+  it("jumps when a glide would go faster than a bus can", () => {
+    const a = planGlide(undefined, at(1000, 1000), shapes, 0);
+    const b = planGlide(a, at(3000, 1060), shapes, 70_000); // 2 km in a minute: 33 m/s, but glides last at most 15 s
+    expect(b.duration).toBe(0);
+    expect(isCatchUp(1000, 1060, 2000, 15_000)).toBe(true);
+    expect(isCatchUp(1000, 1030, 400, 15_000)).toBe(false); // 27 m/s: a bus on the highway
+    expect(isCatchUp(null, null, 100, 10_000)).toBe(false);
   });
 });

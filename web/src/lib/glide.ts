@@ -5,12 +5,20 @@
 // distance, over about the time the bus took between reports. No shape match
 // means no glide: the marker moves straight to the reported position, so a
 // bus never cuts across anything off the route.
+//
+// Catching up is a jump, not a glide: after the page has been in the
+// background (or offline) the next report can be minutes newer, and gliding
+// there would send buses racing round corners.
 import type { LatLon, Vehicle } from "../api/types";
 import { pointAlong, type ShapeGeom } from "./shapes";
 
 export const MIN_GLIDE_MS = 1_000;
 export const MAX_GLIDE_MS = 15_000;
 export const DEFAULT_GLIDE_MS = 10_000;
+/** Reports further apart than this are a catch-up, not movement to show. */
+export const MAX_REPORT_GAP_S = 90;
+/** Faster than any bus in the corridor (about 125 km/h): a glide this fast is a catch-up. */
+export const MAX_GLIDE_SPEED_MPS = 35;
 
 export interface Glide {
   geom: ShapeGeom | null; // null: not on a shape, show `raw`
@@ -43,6 +51,14 @@ export function isMoving(g: Glide, now: number): boolean {
   return g.geom !== null && now < g.start + g.duration && g.from !== g.to;
 }
 
+/** Would gliding `metres` in `durationMs` show a catch-up (a long gap between
+ *  reports, or a bus going faster than buses go) rather than real movement? */
+export function isCatchUp(prevTimestamp: number | null, timestamp: number | null, metres: number,
+                          durationMs: number): boolean {
+  if (prevTimestamp != null && timestamp != null && timestamp - prevTimestamp > MAX_REPORT_GAP_S) return true;
+  return metres / (Math.max(durationMs, 1) / 1000) > MAX_GLIDE_SPEED_MPS;
+}
+
 /** The next glide for a vehicle, given its previous one (if any). */
 export function planGlide(
   prev: Glide | undefined,
@@ -58,19 +74,14 @@ export function planGlide(
     return { geom: null, routeId: v.route_id, shapeIndex: null, from: 0, to: 0, start: now, duration: 0, raw,
              timestamp: v.timestamp };
   }
+  const jump: Glide = { geom, routeId: v.route_id, shapeIndex: track.shape_index, from: track.distance_along,
+                        to: track.distance_along, start: now, duration: 0, raw, timestamp: v.timestamp };
   const sameShape = prev?.geom === geom && prev.shapeIndex === track.shape_index && prev.routeId === v.route_id;
-  if (!animate || !track.glide || !prev || !sameShape) {
-    return { geom, routeId: v.route_id, shapeIndex: track.shape_index, from: track.distance_along,
-             to: track.distance_along, start: now, duration: 0, raw, timestamp: v.timestamp };
-  }
+  if (!animate || !track.glide || !prev || !sameShape) return jump;
   if (prev.timestamp === v.timestamp && prev.to === track.distance_along) return prev; // same report again
-  return {
-    geom, routeId: v.route_id, shapeIndex: track.shape_index,
-    from: alongAt(prev, now), // carry on from where the marker is now
-    to: track.distance_along,
-    start: now,
-    duration: glideDuration(prev.timestamp, v.timestamp),
-    raw,
-    timestamp: v.timestamp,
-  };
+  const from = alongAt(prev, now); // carry on from where the marker is now
+  const duration = glideDuration(prev.timestamp, v.timestamp);
+  if (isCatchUp(prev.timestamp, v.timestamp, Math.abs(track.distance_along - from), duration)) return jump;
+  return { geom, routeId: v.route_id, shapeIndex: track.shape_index, from, to: track.distance_along, start: now,
+           duration, raw, timestamp: v.timestamp };
 }
