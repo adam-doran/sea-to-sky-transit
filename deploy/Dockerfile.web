@@ -6,6 +6,7 @@ COPY web/package.json web/package-lock.json ./
 RUN npm ci --no-audit --no-fund
 COPY web/ ./
 COPY LICENSE /LICENSE
+COPY deploy/map-assets /deploy/map-assets
 # The AGPL asks that users can get the source: the release build links to the repository
 ARG SOURCE_URL=""
 ENV VITE_SOURCE_URL=$SOURCE_URL

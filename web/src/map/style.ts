@@ -4,17 +4,24 @@ import { BASEMAP, MAP_ASSETS, TILES_URL } from "../config";
 
 export function basemapStyle(dark: boolean): StyleSpecification {
   const flavor = dark ? "dark" : "light";
+  // MapLibre wants absolute URLs for glyphs and sprites
+  const assets = new URL(MAP_ASSETS, location.origin).href.replace(/\/$/, "");
+  const glyphs = `${assets}/fonts/{fontstack}/{range}.pbf`;
+  const sprite = `${assets}/sprites/v4/${flavor}`;
   if (BASEMAP === "none") {
+    // No tiles, but the same fonts and icons, so tests can check they load
     return {
       version: 8,
+      glyphs,
+      sprite,
       sources: {},
       layers: [{ id: "background", type: "background", paint: { "background-color": dark ? "#1b1f24" : "#eef1f4" } }],
     };
   }
   return {
     version: 8,
-    glyphs: `${MAP_ASSETS}/fonts/{fontstack}/{range}.pbf`,
-    sprite: `${MAP_ASSETS}/sprites/v4/${flavor}`,
+    glyphs,
+    sprite,
     sources: {
       protomaps: {
         type: "vector",

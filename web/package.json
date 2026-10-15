@@ -6,16 +6,17 @@
   "type": "module",
   "scripts": {
     "licence": "node -e \"require('fs').copyFileSync('../LICENSE','public/LICENSE.txt')\"",
-    "predev": "npm run -s licence",
+    "predev": "npm run -s licence && npm run -s map-assets",
     "dev": "vite",
-    "prebuild": "npm run -s licence",
+    "prebuild": "npm run -s licence && npm run -s map-assets",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src tests e2e playwright.config.ts",
     "test": "vitest run",
     "e2e": "playwright test",
-    "api-types": "openapi-typescript src/api/openapi.json -o src/api/schema.d.ts"
+    "api-types": "openapi-typescript src/api/openapi.json -o src/api/schema.d.ts",
+    "map-assets": "sh ../deploy/map-assets/fetch.sh public/map-assets"
   },
   "engines": {
     "node": ">=24"

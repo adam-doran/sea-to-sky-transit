@@ -16,6 +16,13 @@
 		file_server
 	}
 
+	# Map fonts and icons: pinned by deploy/map-assets/fetch.sh, so safe to cache
+	handle /map-assets/* {
+		root * /srv/web
+		header Cache-Control "public, max-age=2592000"
+		file_server
+	}
+
 	# The web app: hashed assets cache forever, everything else is the SPA.
 	handle /assets/* {
 		root * /srv/web

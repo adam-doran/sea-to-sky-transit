@@ -61,5 +61,7 @@ its source (`SOURCE_URL` in `web/src/config.ts`) for that reason.
 
 Transit data, including the recorded feeds in `backend/tests/fixtures`, is
 © BC Transit, published as [open data](https://www.bctransit.com/open-data/), and
-isn't covered by the AGPL. Map data © OpenStreetMap contributors.
+isn't covered by the AGPL. Map data © OpenStreetMap contributors. The map's
+fonts (Noto Sans, SIL Open Font License) and icons (from tangrams/icons, MIT)
+ship with their own licences; see `deploy/map-assets/`.
 For official transit information always check BC Transit.

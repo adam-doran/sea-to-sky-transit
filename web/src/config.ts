@@ -5,8 +5,9 @@ export const DEFAULT_SYSTEM = "squamish";
 
 export const API_BASE = "/api";
 export const TILES_URL = "/tiles/sea-to-sky.pmtiles";
-// Fonts and icons for the basemap. Self-host these alongside the tiles before launch.
-export const MAP_ASSETS = "https://protomaps.github.io/basemaps-assets";
+// Fonts and icons for the basemap, served by us (deploy/map-assets/fetch.sh), so
+// visitors' browsers never contact third parties.
+export const MAP_ASSETS = "/map-assets";
 // "none" draws a plain background instead of map tiles: used by the end-to-end
 // tests, so they need no tiles and no network.
 export const BASEMAP: "protomaps" | "none" = import.meta.env.VITE_BASEMAP === "none" ? "none" : "protomaps";
