@@ -8,7 +8,7 @@ cd "$(dirname "$0")/.."
 
 export DEV_API_PORT=${DEV_API_PORT:-8199} DEV_DB_PORT=${DEV_DB_PORT:-5499}
 export LAYOVER_API="http://localhost:${DEV_API_PORT}"
-compose=(docker compose -p layover-e2e -f deploy/compose.dev.yml --profile e2e)
+compose=(docker compose -p layover-e2e -f "$PWD/deploy/compose.dev.yml" --profile e2e)
 
 cleanup() { "${compose[@]}" down -v --remove-orphans >/dev/null 2>&1 || true; }
 trap cleanup EXIT INT TERM PIPE
