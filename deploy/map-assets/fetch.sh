@@ -11,7 +11,7 @@
 set -eu
 
 COMMIT=028c18f713baecad011301ff7a69acc39bcc2ae7
-FONTS="Noto Sans Regular|Noto Sans Medium|Noto Sans Italic"
+FONTS="Noto Sans Regular|Noto Sans Medium"  # the map sets italic labels in Regular (web/src/map/style.ts)
 THEMES="light dark"
 HERE=$(cd "$(dirname "$0")" && pwd)
 

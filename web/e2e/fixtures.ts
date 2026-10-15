@@ -78,7 +78,12 @@ export { expect };
 
 export const isPhone = (page: Page) => (page.viewportSize()?.width ?? 1000) <= 720;
 
-/** On phones the panel starts collapsed; open it. */
+/** On phones the sheet starts collapsed on the map; open it (selecting a
+ *  stop or bus opens it by itself). */
 export async function openPanel(page: Page): Promise<void> {
-  if (isPhone(page)) await page.getByRole("button", { name: "Show panel" }).click();
+  if (!isPhone(page)) return;
+  await expect(page.locator(".panel .status")).toBeVisible();
+  if ((await page.locator(".panel").getAttribute("data-sheet")) === "peek") {
+    await page.getByRole("button", { name: "Show panel" }).click();
+  }
 }

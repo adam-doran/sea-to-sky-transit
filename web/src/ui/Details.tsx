@@ -1,3 +1,4 @@
+import { upcoming } from "../lib/departures";
 import { agoLabel, clock, delayLabel, OCCUPANCY, untilLabel } from "../lib/format";
 import { departuresDoc, liveDoc, now, routes, select, stops, timeZone } from "../state";
 import { Badge } from "./common";
@@ -13,18 +14,17 @@ function Back() {
 export function StopDetails({ id }: { id: string }) {
   const stop = stops.value.get(id);
   if (!stop) return <div class="details"><Back /><p class="muted">This stop isn't in the current timetable.</p></div>;
-  const deps = departuresDoc.value?.stops[id];
+  const all = departuresDoc.value?.stops[id];
+  const deps = upcoming(all, now.value);
   const tz = timeZone.value;
+  // The answer first: the stop's name, then when the buses come
   return (
     <div class="details">
       <Back />
       <h2 class="details-title">{stop.name}</h2>
-      <p class="muted small">
-        Stop {stop.code || stop.id} · {stop.routes.map((r) => <Badge key={r} route={routes.value.get(r)} size="sm" />)}
-      </p>
-      {!deps && !departuresDoc.value ? <p class="muted">Loading departures…</p> : null}
-      {departuresDoc.value && !deps?.length ? <p class="muted">No buses from this stop in the next 3 hours.</p> : null}
-      {deps?.length ? (
+      {!departuresDoc.value ? <p class="muted">Loading departures…</p> : null}
+      {departuresDoc.value && !deps.length ? <p class="muted">No buses from this stop in the next 3 hours.</p> : null}
+      {deps.length ? (
         <ul class="departures">
           {deps.map((d) => {
             const late = delayLabel(d.delay);
@@ -43,6 +43,9 @@ export function StopDetails({ id }: { id: string }) {
           })}
         </ul>
       ) : null}
+      <p class="muted small stop-meta">
+        Stop {stop.code || stop.id} · {stop.routes.map((r) => <Badge key={r} route={routes.value.get(r)} size="sm" />)}
+      </p>
     </div>
   );
 }

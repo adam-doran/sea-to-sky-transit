@@ -4,8 +4,10 @@ import type { DeparturesDocument, LatLon, LiveDocument, RouteInfo, StaticDocumen
   from "./api/types";
 import { STALE_AFTER_SECONDS } from "./config";
 import { badgeText, hexColor } from "./lib/color";
+import { loadLastStops, saveLastStops } from "./lib/lastStop";
 import { buildPath, parsePath, type Selection } from "./lib/route";
 import { buildGeom, type ShapeGeom } from "./lib/shapes";
+import type { SheetState } from "./lib/sheet";
 import { loadPreference, resolveTheme, savePreference, type ThemePreference } from "./lib/theme";
 
 export const systems = signal<SystemInfo[]>([]);
@@ -23,10 +25,30 @@ export type LocateState = "off" | "finding" | "on" | "denied" | "unavailable";
 export const userPosition = signal<{ at: LatLon; accuracy: number } | null>(null);
 export const locateState = signal<LocateState>("off");
 
+export const online = signal(typeof navigator === "undefined" ? true : navigator.onLine);
+if (typeof addEventListener === "function") {
+  addEventListener("online", () => (online.value = true));
+  addEventListener("offline", () => (online.value = false));
+}
+
+// ---- layout ----
+
+/** Phones get a bottom sheet; wider screens a side panel. Matches styles.css. */
+const phoneQuery = typeof matchMedia === "function" ? matchMedia("(max-width: 720px)") : null;
+export const phoneLayout = signal(phoneQuery?.matches ?? false);
+phoneQuery?.addEventListener("change", (e) => (phoneLayout.value = e.matches));
+
+/** The panel: on phones a sheet resting at one of three heights; elsewhere
+ *  open ("full") or collapsed ("peek"). Phones start collapsed, on the map. */
+export const sheet = signal<SheetState>(phoneLayout.peek() ? "peek" : "full");
+/** How much of the map the panel covers, in px from the bottom (phones) or
+ *  the left (wide screens), so the map can keep things clear of it. */
+export const panelCover = signal({ bottom: 0, left: 0 });
+
 // ---- theme ----
 
 const darkQuery = typeof matchMedia === "function" ? matchMedia("(prefers-color-scheme: dark)") : null;
-const safeStorage = (() => {
+export const safeStorage = (() => {
   try {
     return typeof localStorage === "undefined" ? undefined : localStorage;
   } catch {
@@ -92,6 +114,22 @@ export function switchSystem(slug: string): void {
   departuresDoc.value = null;
   hiddenRoutes.value = new Set();
   select(null);
+}
+
+/** The stop this person last opened, per system (kept on this device). */
+const lastStops = signal(loadLastStops(safeStorage));
+
+/** The stop this person last opened in the current system, if it still exists. */
+export const lastStop = computed(() => {
+  const id = systemSlug.value ? lastStops.value[systemSlug.value] : undefined;
+  return id ? stops.value.get(id) ?? null : null;
+});
+
+export function rememberStop(stopId: string): void {
+  const slug = systemSlug.value;
+  if (!slug || lastStops.value[slug] === stopId) return;
+  lastStops.value = { ...lastStops.value, [slug]: stopId };
+  saveLastStops(safeStorage, lastStops.value);
 }
 
 export function readLocation(defaultSystem: string): void {

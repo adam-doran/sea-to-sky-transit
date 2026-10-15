@@ -1,96 +1,102 @@
-import type { NextDeparture, StopDeparture } from "../api/types";
+import type { NextDeparture, StopInfo } from "../api/types";
 import { NEARBY_COUNT, NEARBY_MAX_METRES, WALK_METRES_PER_MINUTE } from "../config";
+import { upcoming } from "../lib/departures";
 import { clock, plural, untilLabel } from "../lib/format";
-import { formatDistance, nearestStops } from "../lib/geo";
+import { formatDistance, nearestStops, type NearbyStop } from "../lib/geo";
 import { httpUrl } from "../lib/url";
+import { startLocating } from "../locate";
 import {
-  departuresDoc, hiddenRoutes, liveDoc, locateState, now, routes, select, staticDoc, stops, timeZone,
+  departuresDoc, hiddenRoutes, lastStop, liveDoc, locateState, now, routes, select, staticDoc, stops, timeZone,
   toggleRoute, userPosition,
 } from "../state";
 import { Badge, Section } from "./common";
 
 // ---- Near you ----
 
-let watchId: number | null = null;
+/** The nearest stops, when the location is known and the system is in reach. */
+function nearby(): NearbyStop[] {
+  const pos = userPosition.value;
+  const doc = staticDoc.value;
+  if (locateState.value !== "on" || !pos || !doc) return [];
+  const found = nearestStops(doc.stops, pos.at, NEARBY_COUNT);
+  return found[0] && found[0].metres <= NEARBY_MAX_METRES ? found : [];
+}
 
-export function startLocating(): void {
-  if (!("geolocation" in navigator)) {
-    locateState.value = "unavailable";
-    return;
-  }
-  if (watchId != null) return;
-  locateState.value = "finding";
-  watchId = navigator.geolocation.watchPosition(
-    (pos) => {
-      userPosition.value = { at: [pos.coords.latitude, pos.coords.longitude], accuracy: pos.coords.accuracy };
-      locateState.value = "on";
-    },
-    (err) => {
-      if (watchId != null) navigator.geolocation.clearWatch(watchId);
-      watchId = null;
-      locateState.value = err.code === err.PERMISSION_DENIED ? "denied" : "unavailable";
-    },
-    { enableHighAccuracy: true, maximumAge: 15_000, timeout: 20_000 },
+/** A stop with its next three buses; opens the stop's departures. */
+function StopCard({ stop, note }: { stop: StopInfo; note: string }) {
+  const deps = upcoming(departuresDoc.value?.stops[stop.id], now.value).filter((d) => !d.cancelled).slice(0, 3);
+  return (
+    <button type="button" class="card-button" onClick={() => select({ kind: "stop", id: stop.id })}>
+      <span class="row-between">
+        <strong>{stop.name}</strong>
+        <span class="muted small nowrap">{note}</span>
+      </span>
+      <span class="deps-inline">
+        {deps.length ? deps.map((d) => (
+          <span key={d.trip_id} class={d.live ? "live" : "muted"}>
+            <Badge route={routes.value.get(d.route_id)} size="sm" /> {untilLabel(d.time, now.value, timeZone.value)}
+          </span>
+        )) : <span class="muted small">No buses in the next 3 hours</span>}
+      </span>
+    </button>
   );
 }
 
-function shortWhen(d: StopDeparture): string {
-  return untilLabel(d.time, now.value, timeZone.value);
+const walk = (metres: number) =>
+  `${formatDistance(metres)} · ${Math.max(1, Math.round(metres / WALK_METRES_PER_MINUTE))} min walk`;
+
+function LocateButton() {
+  return (
+    <button type="button" class="locate-button" onClick={startLocating}>
+      <span aria-hidden="true">◎</span> Find stops near me
+    </button>
+  );
+}
+
+/** What the collapsed sheet shows on a phone: the one stop most likely to
+ *  matter (nearest, else the last one opened), or the way to find it. */
+export function PeekSummary() {
+  if (!staticDoc.value) return null;
+  const near = nearby()[0];
+  if (near) return <div class="peek"><StopCard stop={near.stop} note={walk(near.metres)} /></div>;
+  const last = lastStop.value;
+  if (last) return <div class="peek"><StopCard stop={last} note="Your last stop" /></div>;
+  const state = locateState.value;
+  if (state === "off") return <div class="peek"><LocateButton /></div>;
+  if (state === "finding") return <p class="peek muted small">Finding your location…</p>;
+  return null;
 }
 
 export function NearYou() {
   const state = locateState.value;
-  const pos = userPosition.value;
   const doc = staticDoc.value;
+  const stopsNear = nearby();
+  const last = lastStop.value;
+  const lastCard = last && !stopsNear.some((n) => n.stop.id === last.id)
+    ? <li><StopCard stop={last} note="Your last stop" /></li> : null;
+  let status = null;
   if (state === "off") {
-    return (
-      <Section title="Near you" id="near-you">
-        <button type="button" class="locate-button" onClick={startLocating}>
-          <span aria-hidden="true">◎</span> Find stops near me
-        </button>
-        <p class="muted small">Your location stays on this device.</p>
-      </Section>
-    );
-  }
-  if (state === "finding" || !pos || !doc) {
-    const message = state === "denied" ? "Location access is blocked. Allow it in your browser's settings to see stops near you."
-      : state === "unavailable" ? "Couldn't find your location." : "Finding your location…";
-    return <Section title="Near you" id="near-you"><p class="muted">{message}</p></Section>;
-  }
-  const nearby = nearestStops(doc.stops, pos.at, NEARBY_COUNT);
-  if (!nearby[0] || nearby[0].metres > NEARBY_MAX_METRES) {
-    return (
-      <Section title="Near you" id="near-you">
-        <p class="muted">You're {formatDistance(nearby[0]?.metres ?? 0)} from the nearest {doc.system.name} stop.</p>
-      </Section>
+    status = <><LocateButton /><p class="muted small">Your location stays on this device.</p></>;
+  } else if (!stopsNear.length) {
+    const nearest = state === "on" && userPosition.value && doc ? nearestStops(doc.stops, userPosition.value.at, 1)[0] : undefined;
+    status = (
+      <p class="muted">
+        {state === "denied" ? "Location access is blocked. Allow it in your browser's settings to see stops near you."
+          : state === "unavailable" ? "Couldn't find your location."
+          : nearest && doc ? `You're ${formatDistance(nearest.metres)} from the nearest ${doc.system.name} stop.`
+          : "Finding your location…"}
+      </p>
     );
   }
   return (
     <Section title="Near you" id="near-you">
-      <ul class="nearby">
-        {nearby.map(({ stop, metres }) => {
-          const deps = (departuresDoc.value?.stops[stop.id] ?? []).filter((d) => !d.cancelled).slice(0, 3);
-          return (
-            <li key={stop.id}>
-              <button type="button" class="card-button" onClick={() => select({ kind: "stop", id: stop.id })}>
-                <span class="row-between">
-                  <strong>{stop.name}</strong>
-                  <span class="muted small nowrap">
-                    {formatDistance(metres)} · {Math.max(1, Math.round(metres / WALK_METRES_PER_MINUTE))} min walk
-                  </span>
-                </span>
-                <span class="deps-inline">
-                  {deps.length ? deps.map((d) => (
-                    <span key={d.trip_id} class={d.live ? "live" : "muted"}>
-                      <Badge route={routes.value.get(d.route_id)} size="sm" /> {shortWhen(d)}
-                    </span>
-                  )) : <span class="muted small">No buses in the next 3 hours</span>}
-                </span>
-              </button>
-            </li>
-          );
-        })}
-      </ul>
+      {(stopsNear.length > 0 || lastCard) && (
+        <ul class="nearby">
+          {stopsNear.map(({ stop, metres }) => <li key={stop.id}><StopCard stop={stop} note={walk(metres)} /></li>)}
+          {lastCard}
+        </ul>
+      )}
+      {status}
     </Section>
   );
 }

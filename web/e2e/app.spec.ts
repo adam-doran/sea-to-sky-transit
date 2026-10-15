@@ -1,3 +1,4 @@
+import { upcoming } from "../src/lib/departures";
 import { expect, freezeClock, isPhone, openPanel, systemData, test } from "./fixtures";
 
 // Bus markers on the map (the legend in the panel draws example buses too)
@@ -28,9 +29,12 @@ test.describe("map and buses", () => {
     await freezeClock(page, squamish.live);
     await page.goto("/squamish");
     const bus = squamish.live.vehicles[0]!;
-    await page.locator(BUSES).first().waitFor();
-    await page.goto(`/squamish/bus/${bus.id}`);
-    await openPanel(page);
+    const marker = page.locator(`${BUSES}[data-vehicle="${bus.id}"]`);
+    await marker.waitFor();
+    // Markers glide between reports; a click event avoids waiting for them to stop
+    await marker.dispatchEvent("click");
+    await expect(page).toHaveURL(new RegExp(`/squamish/bus/${bus.id}$`));
+    // The panel opens by itself, on phones too
     await expect(page.locator(".details-title")).toBeVisible();
     await expect(page.locator(".facts")).toContainText("Updated");
     if (bus.waiting) await expect(page.locator(".facts")).toContainText("Waiting to depart");
@@ -105,18 +109,19 @@ test.describe("stops", () => {
     const stop = squamish.static.stops.find((s) => s.id === stopId)!;
     await freezeClock(page, squamish.live);
     await page.goto(`/squamish/stop/${stopId}`);
-    await openPanel(page);
+    // A shared or bookmarked stop opens with its departures showing, on phones too
     await expect(page.locator(".details-title")).toHaveText(stop.name);
     await expect(page).toHaveTitle(`${stop.name} · Squamish · Layover`);
-    await expect(page.locator(".departures li")).toHaveCount(deps.length);
-    const live = deps.filter((d) => d.live).length;
+    // Buses that left over a minute before the (frozen) clock are dropped
+    const shown = upcoming(deps, (squamish.live.generated_at + 5) * 1000);
+    await expect(page.locator(".departures li")).toHaveCount(shown.length);
+    const live = shown.filter((d) => d.live).length;
     await expect(page.locator(".departures li.live")).toHaveCount(live);
   });
 
   test("an unknown stop says so", async ({ page, squamish }) => {
     await freezeClock(page, squamish.live);
     await page.goto("/squamish/stop/not-a-stop");
-    await openPanel(page);
     await expect(page.getByText("This stop isn't in the current timetable.")).toBeVisible();
   });
 });
@@ -124,11 +129,12 @@ test.describe("stops", () => {
 test.describe("near you", () => {
   test.use({ geolocation: { latitude: 49.7016, longitude: -123.1558 }, permissions: ["geolocation"] });
 
-  test("finds the three nearest stops, with walking time", async ({ page, squamish }) => {
+  test("finds the three nearest stops, with walking time, without asking again", async ({ page, squamish }) => {
     await freezeClock(page, squamish.live);
     await page.goto("/squamish");
     await openPanel(page);
-    await page.getByRole("button", { name: "Find stops near me" }).click();
+    // Location is already allowed, so there's nothing to tap
+    await expect(page.getByRole("button", { name: "Find stops near me" })).toHaveCount(0);
     const cards = page.locator(".nearby .card-button");
     await expect(cards).toHaveCount(3);
     await expect(cards.first()).toContainText("min walk");
