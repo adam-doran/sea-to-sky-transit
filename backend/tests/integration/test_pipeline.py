@@ -13,12 +13,14 @@ from sqlalchemy import Engine, func, select, text
 
 from transitlive.api import schemas
 from transitlive.api.app import create_app
+from transitlive.collector import fetch
 from transitlive.collector.archive import Archive
 from transitlive.collector.fetch import Fetcher
 from transitlive.collector.replay import Replayer
 from transitlive.collector.service import Collector
 from transitlive.config import load_config
 from transitlive.db import schema as s
+from transitlive.gtfs import load
 
 pytestmark = pytest.mark.integration
 
@@ -168,6 +170,34 @@ async def test_collector_backs_off_when_bc_transit_is_down(engine: Engine, tmp_p
     with engine.connect() as conn:
         errors = conn.execute(select(s.feed_fetches.c.error).where(s.feed_fetches.c.error.is_not(None))).scalars()
         assert list(errors) == ["HTTP 503", "HTTP 503"]
+    await fetcher.aclose()
+    await collector.fetcher.aclose()
+
+
+async def test_oversized_downloads_are_recorded_as_errors(
+    engine: Engine, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def huge(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=b"x" * (fetch.REALTIME.max_bytes + 1))
+
+    monkeypatch.setattr(load, "MAX_UNCOMPRESSED_BYTES", 1000)  # the fixture timetables are bigger
+    fetcher = Fetcher(CONFIG.collector.user_agent, 5, transport=fake_bc_transit([]))
+    collector = Collector(CONFIG, engine, Archive(tmp_path), fetcher)
+    await collector.prepare()
+    assert all(task.runtime is None for task in collector.tasks.values())
+
+    collector.fetcher = Fetcher(CONFIG.collector.user_agent, 5, transport=httpx.MockTransport(huge))
+    assert await collector.poll_once("squamish", "vehicleupdates") is None
+    with engine.connect() as conn:
+        rows = conn.execute(
+            select(s.feed_fetches.c.feed, s.feed_fetches.c.http_status, s.feed_fetches.c.error)
+            .where(s.feed_fetches.c.system_id == 43)
+            .order_by(s.feed_fetches.c.id)
+        ).all()
+    assert [(feed, status) for feed, status, _ in rows] == [("static", 200), ("vehicleupdates", 200)]
+    assert rows[0].error.startswith("timetable rejected: GTFS tables over 1,000 bytes")
+    assert rows[1].error == f"response over {fetch.REALTIME.max_bytes:,} bytes"
+    assert not list(tmp_path.rglob("*.zip"))  # nothing rejected reaches the archive
     await fetcher.aclose()
     await collector.fetcher.aclose()
 

@@ -209,8 +209,11 @@ class Archive:
 
     def load(self, relative: str) -> bytes:
         """Read an archive path as stored in the database (feed_versions.archive_path),
-        falling back to that day's bundle once the file itself is gone."""
+        falling back to that day's bundle once the file itself is gone. Paths
+        that lead outside the archive are refused."""
         path = self.root / relative
+        if not path.resolve().is_relative_to(self.root.resolve()):
+            raise ValueError(f"{relative!r} is outside the archive")
         if path.exists():
             return self.read(path)
         parts = Path(relative).parts

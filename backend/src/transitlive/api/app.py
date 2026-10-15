@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import datetime as dt
 import gzip
+import threading
 import time
 from dataclasses import dataclass
 from typing import Any
@@ -28,6 +29,7 @@ CACHE_CONTROL = {
     "departures": "public, max-age=15, stale-while-revalidate=30",
 }
 MEMORY_TTL_SECONDS = 2.0  # collapse bursts of identical reads into one database query
+HEALTH_TTL_SECONDS = 10.0  # the health check is public, so it never costs more than one query per 10 s
 STALE_AFTER_SECONDS = 120  # health check: a realtime feed this old means the collector is in trouble
 
 
@@ -37,11 +39,19 @@ class _Cached:
     at: float
 
 
+@dataclass
+class _CachedHealth:
+    rows: list[dict[str, Any]]
+    at: float
+
+
 def create_app(config: Config | None = None, engine: Engine | None = None) -> FastAPI:
     config = config or load_config()
     engine = engine or make_engine()
     slugs = {s.slug for s in config.systems}
     cache: dict[tuple[str, str], _Cached] = {}
+    health_cache: _CachedHealth | None = None
+    health_lock = threading.Lock()
 
     app = FastAPI(
         title="Sea-to-Sky Transit Live API",
@@ -60,6 +70,15 @@ def create_app(config: Config | None = None, engine: Engine | None = None) -> Fa
         if hit.doc is None:
             raise HTTPException(503, "not collected yet; try again shortly", headers={"Retry-After": "10"})
         return hit.doc
+
+    def feed_health() -> list[dict[str, Any]]:
+        # The lock means a burst of requests as the cache expires costs one query, not one each
+        nonlocal health_cache
+        with health_lock:
+            now = time.monotonic()
+            if health_cache is None or now - health_cache.at > HEALTH_TTL_SECONDS:
+                health_cache = _CachedHealth(store.feed_health(engine), now)
+            return health_cache.rows
 
     def respond(request: Request, slug: str, kind: str) -> Response:
         doc = document(slug, kind)
@@ -103,7 +122,7 @@ def create_app(config: Config | None = None, engine: Engine | None = None) -> Fa
     @app.get("/api/health", response_model=schemas.Health)
     def health(response: Response) -> dict[str, Any]:
         now = dt.datetime.now(dt.UTC)
-        rows = store.feed_health(engine)
+        rows = feed_health()
         feeds, timetables = [], {}
         for r in rows:
             if r["feed"] == "static":

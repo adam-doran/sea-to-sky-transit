@@ -20,7 +20,7 @@ from sqlalchemy import Engine
 from transitlive.collector import bundles
 from transitlive.collector.archive import Archive
 from transitlive.collector.bundles import S3Store
-from transitlive.collector.fetch import Backoff, Fetcher, Spacing
+from transitlive.collector.fetch import REALTIME, TIMETABLE, Backoff, Fetcher, Spacing
 from transitlive.collector.realtime import FeedError, decode
 from transitlive.config import REALTIME_FEEDS, Config, System
 from transitlive.db import store
@@ -28,7 +28,7 @@ from transitlive.db.engine import drop_old_partitions, ensure_partitions
 from transitlive.domain.model import Snapshot, Timetable
 from transitlive.domain.service_day import local_date
 from transitlive.gtfs.compile import compile_timetable
-from transitlive.gtfs.load import read_gtfs_zip
+from transitlive.gtfs.load import GtfsFeed, read_gtfs_zip
 from transitlive.live.runtime import SystemRuntime
 
 log = logging.getLogger("transitlive.collector")
@@ -114,6 +114,9 @@ class Collector:
         except FileNotFoundError:
             log.warning("%s: active timetable %s missing from the archive", task.system.slug, path)
             return
+        except ValueError as e:
+            log.error("%s: active timetable not loaded: %s", task.system.slug, e)
+            return
         tt = await asyncio.to_thread(lambda: compile_timetable(read_gtfs_zip(data), task.system.timezone))
         task.runtime = SystemRuntime(task.system, tt, version_id)
         await self._publish(task, ("static", "live", "departures"))
@@ -129,7 +132,16 @@ class Collector:
         async with task.sync_lock:
             url = self.config.collector.static(system)
             now = self.clock()
-            result = await self.fetcher.get(url)
+            result = await self.fetcher.get(url, TIMETABLE)
+            parsed: tuple[GtfsFeed, Timetable] | None = None
+            error = result.error
+            if result.ok and result.body is not None:
+                try:
+                    feed = await asyncio.to_thread(read_gtfs_zip, result.body)
+                    parsed = feed, await asyncio.to_thread(compile_timetable, feed, system.timezone)
+                except Exception as e:  # a broken zip must never take down the collector
+                    error = f"timetable rejected: {e}"
+                    log.error("%s: %s", slug, error)
             await asyncio.to_thread(
                 store.record_fetch,
                 self.engine,
@@ -143,17 +155,13 @@ class Collector:
                 None,
                 result.latency_ms,
                 False,
-                result.error,
+                error,
             )
-            if not result.ok or result.body is None or result.sha256 is None:
-                log.warning("%s: timetable download failed: %s", slug, result.error)
+            if parsed is None or result.body is None or result.sha256 is None:
+                if not result.ok:
+                    log.warning("%s: timetable download failed: %s", slug, result.error)
                 return False
-            try:
-                feed = await asyncio.to_thread(read_gtfs_zip, result.body)
-                tt = await asyncio.to_thread(compile_timetable, feed, system.timezone)
-            except Exception as e:  # a broken zip must never take down the collector
-                log.error("%s: timetable rejected: %s", slug, e)
-                return False
+            feed, tt = parsed
             path = await asyncio.to_thread(self.archive.write_static, slug, result.sha256, result.body, now)
             saved = await asyncio.to_thread(
                 store.save_feed_version,
@@ -188,7 +196,7 @@ class Collector:
         if not backoff.ready(now):
             return None
         url = self.config.collector.realtime(feed, system)
-        result = await self.fetcher.get(url)
+        result = await self.fetcher.get(url, REALTIME)
         snap: Snapshot | None = None
         error = result.error
         if result.ok and result.body is not None:
