@@ -21,8 +21,9 @@ deploy/tiles/build.sh            # map tiles (~20 MB); needs the pmtiles CLI
 docker compose -f deploy/compose.yml --env-file deploy/.env up -d
 ```
 
-Set the contact details in `config/systems.toml` (`user_agent`) before the
-first deploy, so BC Transit can reach the operators.
+Requests to BC Transit carry `contact@squamishbuses.ca` in their
+`User-Agent` (`config/systems.toml`). Keep that mailbox monitored, and update
+it there if it ever changes.
 
 Check it: `curl https://$DOMAIN/api/health` returns `"ok": true` within a
 minute or two.

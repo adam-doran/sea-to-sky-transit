@@ -3,8 +3,8 @@
 # https://www.bctransit.com/open-data/
 
 [collector]
-# Identify ourselves to BC Transit. Replace the contact before deploying.
-user_agent = "sea-to-sky-transit/0.1 (+https://github.com/CHANGE-ME/sea-to-sky-transit; contact: CHANGE-ME)"
+# Identify ourselves to BC Transit, so they can reach us about our traffic.
+user_agent = "Layover/0.1 (+https://squamishbuses.ca; contact@squamishbuses.ca)"
 realtime_url = "https://bct.tmix.se/gtfs-realtime/{feed}.pb?operatorIds={operator}"
 static_url = "https://bct.tmix.se/Tmix.Cap.TdExport.WebApi/gtfs/?operatorIds={operator}"
 timeout_seconds = 10
