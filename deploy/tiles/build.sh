@@ -27,4 +27,6 @@ mkdir -p "$(dirname "$OUT")"
 echo "extracting $BBOX (zoom 0-$MAXZOOM) from $url"
 "$PMTILES" extract "$url" "$OUT.tmp" --bbox="$BBOX" --maxzoom="$MAXZOOM"
 mv "$OUT.tmp" "$OUT"
-"$PMTILES" show "$OUT" | head -12
+# Not head: it can exit before pmtiles finishes writing, and the SIGPIPE
+# would fail the script under pipefail after the tiles are already in place
+"$PMTILES" show "$OUT" | sed -n '1,12p'
