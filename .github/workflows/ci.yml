@@ -92,8 +92,15 @@ jobs:
         run: git diff --exit-code -- web/src/api || (echo "Run 'make api-types' and commit the result." && exit 1)
 
   image:
-    name: Build images
-    runs-on: ubuntu-latest
+    name: Build images (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v4
       - run: docker build -f backend/Dockerfile -t sea-to-sky-transit-backend:ci .
