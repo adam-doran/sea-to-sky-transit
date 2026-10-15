@@ -11,7 +11,7 @@ import logging
 import time
 
 from transitlive.collector.archive import Archive
-from transitlive.collector.fetch import Fetcher, Spacing
+from transitlive.collector.fetch import REALTIME, TIMETABLE, Fetcher, Spacing
 from transitlive.collector.realtime import FeedError, decode
 from transitlive.config import REALTIME_FEEDS, Config
 
@@ -23,7 +23,7 @@ async def capture(config: Config, archive: Archive, minutes: float) -> int:
     saved = 0
     try:
         for system in config.systems:
-            result = await fetcher.get(config.collector.static(system))
+            result = await fetcher.get(config.collector.static(system), TIMETABLE)
             if result.ok and result.body and result.sha256:
                 archive.write_static(system.slug, result.sha256, result.body, time.time())
 
@@ -35,7 +35,7 @@ async def capture(config: Config, archive: Archive, minutes: float) -> int:
             while time.monotonic() < end:
                 await spacing.wait()
                 spacing.mark()
-                result = await fetcher.get(url)
+                result = await fetcher.get(url, REALTIME)
                 if result.ok and result.body and result.sha256 != last:
                     try:
                         snap = decode(feed, result.body)

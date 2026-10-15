@@ -10,10 +10,10 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from typing import Any
 
-from sqlalchemy import Engine, func, insert, select, update
+from sqlalchemy import Engine, Text, column, insert, select, true, update, values
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-from transitlive.config import System
+from transitlive.config import REALTIME_FEEDS, System
 from transitlive.db import schema as s
 from transitlive.domain.model import Alert, Snapshot, TripUpdate
 from transitlive.domain.shape_track import TrackPosition
@@ -464,23 +464,24 @@ def get_document(engine: Engine, slug: str, kind: str) -> StoredDocument | None:
 
 
 def feed_health(engine: Engine) -> list[dict[str, Any]]:
-    """Per system and feed: when it last succeeded, and the latest feed timestamp."""
+    """Per system and feed: when it last succeeded, and that fetch's feed timestamp.
+
+    One index lookup (feed_fetches_latest) per system and feed, newest first,
+    so the cost stays flat however long the fetch log gets."""
+    feeds = values(column("feed", Text), name="feeds").data([(f,) for f in ("static", *REALTIME_FEEDS)])
+    ff = s.feed_fetches.c
+    latest = (
+        select(ff.fetched_at.label("last_success"), ff.header_at.label("last_header"))
+        .where(ff.system_id == s.systems.c.id, ff.feed == feeds.c.feed, ff.error.is_(None))
+        .order_by(ff.fetched_at.desc())
+        .limit(1)
+        .lateral("latest")
+    )
     with engine.connect() as conn:
-        last_ok = (
-            select(
-                s.feed_fetches.c.system_id,
-                s.feed_fetches.c.feed,
-                func.max(s.feed_fetches.c.fetched_at).label("last_success"),
-                func.max(s.feed_fetches.c.header_at).label("last_header"),
-            )
-            .where(s.feed_fetches.c.error.is_(None))
-            .group_by(s.feed_fetches.c.system_id, s.feed_fetches.c.feed)
-            .subquery()
-        )
         rows = conn.execute(
-            select(s.systems.c.slug, last_ok.c.feed, last_ok.c.last_success, last_ok.c.last_header)
-            .join(last_ok, last_ok.c.system_id == s.systems.c.id)
-            .order_by(s.systems.c.slug, last_ok.c.feed)
+            select(s.systems.c.slug, feeds.c.feed, latest.c.last_success, latest.c.last_header)
+            .select_from(s.systems.join(feeds, true()).join(latest, true()))
+            .order_by(s.systems.c.slug, feeds.c.feed)
         ).all()
         versions = conn.execute(
             select(s.systems.c.slug, s.feed_versions.c.feed_version, s.feed_versions.c.end_date)

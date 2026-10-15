@@ -19,7 +19,7 @@ from pathlib import Path
 from sqlalchemy import Engine
 
 from transitlive.collector.archive import Archive
-from transitlive.collector.fetch import FetchResult
+from transitlive.collector.fetch import FetchResult, Limits
 from transitlive.collector.realtime import decode
 from transitlive.collector.service import Collector
 from transitlive.config import REALTIME_FEEDS, Config
@@ -38,7 +38,7 @@ class ArchiveFetcher:
             if found is not None:
                 self.by_url[config.collector.static(system)] = found
 
-    async def get(self, url: str) -> FetchResult:
+    async def get(self, url: str, limits: Limits) -> FetchResult:  # the archive is already trusted
         found = self.by_url.get(url)
         if found is None:
             return FetchResult(url, 404, None, None, 0, "HTTP 404")
