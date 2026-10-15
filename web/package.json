@@ -35,6 +35,7 @@
     "@types/geojson": "7946.0.16",
     "@types/node": "24.19.0",
     "eslint": "10.11.0",
+    "happy-dom": "20.14.5",
     "openapi-typescript": "7.13.0",
     "typescript": "5.9.3",
     "typescript-eslint": "8.71.0",

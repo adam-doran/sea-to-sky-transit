@@ -41,5 +41,9 @@
 		X-Content-Type-Options nosniff
 		Referrer-Policy strict-origin-when-cross-origin
 		Permissions-Policy "geolocation=(self), camera=(), microphone=()"
+		# Same-origin only. MapLibre runs its worker from a blob: URL. The hash is
+		# the theme script inline in web/index.html (a web unit test checks it),
+		# and `vite preview` serves this policy so the e2e tests run under it.
+		Content-Security-Policy "default-src 'self'; script-src 'self' 'sha256-QaFSAWCpP9ltzKjNnuiQja+uxaH0sUZKenXF7J6I5Ow='; worker-src 'self' blob:; child-src 'self' blob:; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'none'"
 	}
 }

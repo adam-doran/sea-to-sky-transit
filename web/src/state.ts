@@ -3,7 +3,7 @@ import { computed, signal } from "@preact/signals";
 import type { DeparturesDocument, LatLon, LiveDocument, RouteInfo, StaticDocument, StopInfo, SystemInfo }
   from "./api/types";
 import { STALE_AFTER_SECONDS } from "./config";
-import { badgeText } from "./lib/color";
+import { badgeText, hexColor } from "./lib/color";
 import { buildPath, parsePath, type Selection } from "./lib/route";
 import { buildGeom, type ShapeGeom } from "./lib/shapes";
 import { loadPreference, resolveTheme, savePreference, type ThemePreference } from "./lib/theme";
@@ -53,7 +53,10 @@ export interface Route extends RouteInfo {
 
 export const routes = computed(() => {
   const map = new Map<string, Route>();
-  for (const r of staticDoc.value?.routes ?? []) map.set(r.id, { ...r, badgeText: badgeText(r.color) });
+  for (const r of staticDoc.value?.routes ?? []) {
+    const color = hexColor(r.color, "#666666");
+    map.set(r.id, { ...r, color, badgeText: badgeText(color) });
+  }
   return map;
 });
 

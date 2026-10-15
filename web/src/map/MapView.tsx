@@ -14,6 +14,7 @@ import {
   hiddenRoutes, liveDoc, routes, select, selection, shapesByRoute, staticDoc, theme, timeZone, userPosition,
 } from "../state";
 import { BusMarkers } from "./buses";
+import { roadPopup } from "./roadPopup";
 import { basemapStyle } from "./style";
 
 const LINE_WIDTH = 4;
@@ -189,11 +190,7 @@ export function MapView() {
       const ids = String(e.features?.[0]?.properties?.routes ?? "").split(",").filter(Boolean);
       const names = ids.map((id) => routes.value.get(id)).filter((r) => r != null);
       if (!names.length) return;
-      const el = document.createElement("div");
-      el.className = "road-popup";
-      el.innerHTML = `<strong>${names.length > 1 ? `${names.length} routes use this road` : "Route on this road"}</strong>` +
-        names.map((r) => `<div><span class="badge" style="--route:${r.color};--route-text:${r.badgeText}">${r.short}</span> ${r.long}</div>`).join("");
-      new maplibregl.Popup({ closeButton: true, maxWidth: "260px" }).setLngLat(e.lngLat).setDOMContent(el).addTo(map);
+      new maplibregl.Popup({ closeButton: true, maxWidth: "260px" }).setLngLat(e.lngLat).setDOMContent(roadPopup(names)).addTo(map);
     });
     for (const layer of ["stops", "route-line"]) {
       map.on("mouseenter", layer, () => (map.getCanvas().style.cursor = "pointer"));

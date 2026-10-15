@@ -46,15 +46,17 @@ class FeedBuilder:
         self.shapes: list[dict[str, Any]] = []
         self.service_dates = service_dates
 
-    def route(self, rid: str, short: str, color: str = "004B8D") -> FeedBuilder:
+    def route(
+        self, rid: str, short: str, color: str = "004B8D", *, long: str | None = None, text_color: str = "FFFFFF"
+    ) -> FeedBuilder:
         self.routes.append(
             {
                 "route_id": rid,
                 "route_short_name": short,
-                "route_long_name": f"Route {short}",
+                "route_long_name": f"Route {short}" if long is None else long,
                 "route_type": 3,
                 "route_color": color,
-                "route_text_color": "FFFFFF",
+                "route_text_color": text_color,
             }
         )
         return self
