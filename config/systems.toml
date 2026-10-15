@@ -1,0 +1,36 @@
+# Transit systems this service collects and serves.
+# Adding a system is one more [[systems]] entry; operator IDs are listed on
+# https://www.bctransit.com/open-data/
+
+[collector]
+# Identify ourselves to BC Transit. Replace the contact before deploying.
+user_agent = "sea-to-sky-transit/0.1 (+https://github.com/CHANGE-ME/sea-to-sky-transit; contact: CHANGE-ME)"
+realtime_url = "https://bct.tmix.se/gtfs-realtime/{feed}.pb?operatorIds={operator}"
+static_url = "https://bct.tmix.se/Tmix.Cap.TdExport.WebApi/gtfs/?operatorIds={operator}"
+timeout_seconds = 10
+static_sync_hours = 6
+
+# How often each realtime feed is fetched, per system, in seconds.
+# 3 systems x (6 + 2 + 1) requests/minute = 27 requests/minute in total.
+[collector.intervals]
+vehicleupdates = 10
+tripupdates = 30
+alerts = 60
+
+[[systems]]
+slug = "squamish"
+name = "Squamish"
+operator_id = 43
+timezone = "America/Vancouver"
+
+[[systems]]
+slug = "whistler"
+name = "Whistler"
+operator_id = 44
+timezone = "America/Vancouver"
+
+[[systems]]
+slug = "pemberton"
+name = "Pemberton Valley"
+operator_id = 50
+timezone = "America/Vancouver"

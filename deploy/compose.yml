@@ -1,0 +1,66 @@
+# Production, on one VPS. See docs/RUNBOOK.md.
+#   cp deploy/.env.example deploy/.env   (fill in DOMAIN, POSTGRES_PASSWORD, IMAGE_TAG)
+#   docker compose -f deploy/compose.yml --env-file deploy/.env up -d
+# Data lives under /srv/transitlive on the host: database, raw archive, backups, web build, map tiles.
+
+name: sea-to-sky-transit
+
+x-backend: &backend
+  image: ghcr.io/${GITHUB_OWNER:-change-me}/sea-to-sky-transit-backend:${IMAGE_TAG:-latest}
+  environment:
+    TRANSITLIVE_DATABASE_URL: postgresql+psycopg://transitlive:${POSTGRES_PASSWORD}@db:5432/transitlive
+    LOG_LEVEL: INFO
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options: { max-size: "20m", max-file: "5" }
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: transitlive
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in deploy/.env}
+      POSTGRES_DB: transitlive
+    volumes: [/srv/transitlive/postgres:/var/lib/postgresql/data]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U transitlive"]
+      interval: 5s
+      retries: 30
+
+  migrate:
+    <<: *backend
+    command: ["migrate"]
+    restart: "no"
+    depends_on:
+      db: { condition: service_healthy }
+
+  collector:
+    <<: *backend
+    command: ["collect", "--archive", "/archive"]
+    volumes: [/srv/transitlive/archive:/archive]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+
+  api:
+    <<: *backend
+    command: ["api", "--host", "0.0.0.0", "--port", "8000"]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+
+  caddy:
+    image: caddy:2.8-alpine
+    ports: ["80:80", "443:443"]
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN in deploy/.env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - /srv/transitlive/web:/srv/web:ro
+      - /srv/transitlive/tiles:/srv/tiles:ro
+      - caddy_data:/data
+    restart: unless-stopped
+    depends_on: [api]
+
+volumes:
+  caddy_data:

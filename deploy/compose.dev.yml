@@ -1,0 +1,63 @@
+# Local development.
+#   make dev          collect from BC Transit (real feeds)
+#   make dev-replay   replay the recorded fixtures on a loop (no network needed)
+# API: http://localhost:8100/api/systems   Docs: http://localhost:8100/docs
+# Ports are DEV_API_PORT (8100) and DEV_DB_PORT (5433), to avoid clashing with other projects.
+
+name: sea-to-sky-transit-dev
+
+x-backend: &backend
+  build:
+    context: ..
+    dockerfile: backend/Dockerfile
+  environment:
+    TRANSITLIVE_DATABASE_URL: postgresql+psycopg://transitlive:transitlive@db:5432/transitlive
+    LOG_LEVEL: INFO
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: transitlive
+      POSTGRES_PASSWORD: transitlive
+      POSTGRES_DB: transitlive
+    ports: ["127.0.0.1:${DEV_DB_PORT:-5433}:5432"]
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U transitlive"]
+      interval: 2s
+      retries: 30
+
+  migrate:
+    <<: *backend
+    command: ["migrate"]
+    depends_on:
+      db: { condition: service_healthy }
+
+  collector:
+    <<: *backend
+    profiles: [live]
+    command: ["collect", "--archive", "/archive"]
+    volumes: [archive:/archive]
+    restart: unless-stopped
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+
+  replay:
+    <<: *backend
+    profiles: [replay]
+    command: ["replay", "/fixtures", "--speed", "1", "--loop"]
+    volumes: ["../backend/tests/fixtures/archive:/fixtures:ro"]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+
+  api:
+    <<: *backend
+    command: ["api", "--host", "0.0.0.0", "--port", "8000"]
+    ports: ["127.0.0.1:${DEV_API_PORT:-8100}:8000"]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+
+volumes:
+  pgdata:
+  archive:
