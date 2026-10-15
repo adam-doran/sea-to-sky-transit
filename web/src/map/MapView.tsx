@@ -2,9 +2,10 @@ import { effect } from "@preact/signals";
 import * as maplibregl from "maplibre-gl";
 import type { GeoJSONSource, LngLatBoundsLike } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-// MapLibre finds its worker relative to its own file, which bundling moves;
-// hand it the worker's real URL instead.
-import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?url";
+// MapLibre finds its worker relative to its own file, which bundling moves,
+// and the worker imports a shared chunk; let Vite bundle it whole and
+// hand MapLibre the bundled worker's URL.
+import workerUrl from "maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url";
 import { Protocol } from "pmtiles";
 import { useEffect, useRef } from "preact/hooks";
 import { STOPS_MIN_ZOOM } from "../config";

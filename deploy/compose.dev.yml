@@ -1,6 +1,7 @@
 # Local development.
 #   make dev          collect from BC Transit (real feeds)
 #   make dev-replay   replay the recorded fixtures on a loop (no network needed)
+#   make e2e          end-to-end tests: own project name and ports, so it can run beside dev
 # API: http://localhost:8100/api/systems   Docs: http://localhost:8100/docs
 # Ports are DEV_API_PORT (8100) and DEV_DB_PORT (5433), to avoid clashing with other projects.
 
@@ -47,6 +48,16 @@ services:
     <<: *backend
     profiles: [replay]
     command: ["replay", "/fixtures", "--speed", "1", "--loop"]
+    volumes: ["../backend/tests/fixtures/archive:/fixtures:ro"]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+
+  # End-to-end tests (make e2e): replay every fixture once, as fast as possible,
+  # then exit, leaving the API serving that final state.
+  replay-once:
+    <<: *backend
+    profiles: [e2e]
+    command: ["replay", "/fixtures", "--speed", "0"]
     volumes: ["../backend/tests/fixtures/archive:/fixtures:ro"]
     depends_on:
       migrate: { condition: service_completed_successfully }

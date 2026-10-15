@@ -54,6 +54,11 @@ docs/                      architecture, data, runbook
   route lines. Refresh them with `make fixtures` (keep them small: 10 minutes
   is plenty).
 - **Never call BC Transit from a test.** Use the fixtures or `httpx.MockTransport`.
+- **End-to-end tests** (`make e2e`) run the built web app against the backend
+  replaying the fixtures, on desktop and phone viewports, with the browser clock
+  frozen at the fixtures' time and no map tiles. Each test reads the API's own
+  documents and checks the page against them, so they keep passing when you
+  refresh the fixtures. Any console error fails a test.
 
 ## The web app
 

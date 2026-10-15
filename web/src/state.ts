@@ -2,6 +2,7 @@
 import { computed, signal } from "@preact/signals";
 import type { DeparturesDocument, LatLon, LiveDocument, RouteInfo, StaticDocument, StopInfo, SystemInfo }
   from "./api/types";
+import { STALE_AFTER_SECONDS } from "./config";
 import { badgeText } from "./lib/color";
 import { buildPath, parsePath, type Selection } from "./lib/route";
 import { buildGeom, type ShapeGeom } from "./lib/shapes";
@@ -45,7 +46,7 @@ export const shapesByRoute = computed(() => {
 /** Bus positions are old: the collector, or BC Transit, has stopped updating. */
 export const stale = computed(() => {
   const at = liveDoc.value?.feeds.vehicles_at;
-  return liveError.value || (at != null && now.value / 1000 - at > 120);
+  return liveError.value || (at != null && now.value / 1000 - at > STALE_AFTER_SECONDS);
 });
 
 // ---- URL <-> state ----

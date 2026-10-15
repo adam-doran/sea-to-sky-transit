@@ -1,3 +1,5 @@
 node_modules/
 dist/
 public/tiles/
+playwright-report/
+test-results/

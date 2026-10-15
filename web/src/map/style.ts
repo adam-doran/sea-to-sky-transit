@@ -1,9 +1,16 @@
 import { layers, namedFlavor } from "@protomaps/basemaps";
 import type { StyleSpecification } from "maplibre-gl";
-import { MAP_ASSETS, TILES_URL } from "../config";
+import { BASEMAP, MAP_ASSETS, TILES_URL } from "../config";
 
 export function basemapStyle(dark: boolean): StyleSpecification {
   const flavor = dark ? "dark" : "light";
+  if (BASEMAP === "none") {
+    return {
+      version: 8,
+      sources: {},
+      layers: [{ id: "background", type: "background", paint: { "background-color": dark ? "#1b1f24" : "#eef1f4" } }],
+    };
+  }
   return {
     version: 8,
     glyphs: `${MAP_ASSETS}/fonts/{fontstack}/{range}.pbf`,

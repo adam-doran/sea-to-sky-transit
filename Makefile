@@ -31,6 +31,9 @@ web-dev: ## Run the web app (needs make dev or make dev-replay running), http://
 web-check: ## Web app lint, type check, tests and build
 	cd web && npm run lint && npm run typecheck && npm test && npm run build
 
+e2e: ## End-to-end tests: real web app + backend on recorded feeds (Docker, no network)
+	deploy/e2e.sh
+
 api-types: ## Regenerate the web app's API types from the backend
 	$(BACKEND) uv run transitlive openapi > ../web/src/api/openapi.json
 	cd web && npm run -s api-types
@@ -38,7 +41,7 @@ api-types: ## Regenerate the web app's API types from the backend
 tiles: ## Cut the Sea-to-Sky map tiles into web/public/tiles (needs the pmtiles CLI)
 	deploy/tiles/build.sh web/public/tiles/sea-to-sky.pmtiles
 
-test-all: lint test test-integration web-check ## Everything CI runs
+test-all: lint test test-integration web-check e2e ## Everything CI runs
 
 fixtures: ## Re-record the replay fixtures from the real feeds (MINUTES=10)
 	rm -rf backend/tests/fixtures/archive
@@ -53,4 +56,4 @@ dev-replay: ## Run the stack locally, replaying the fixtures (no network)
 down: ## Stop the local stack
 	$(COMPOSE_DEV) --profile live --profile replay down
 
-.PHONY: help setup lint format test test-integration test-all fixtures dev dev-replay down web-dev web-check api-types tiles
+.PHONY: help setup lint format test test-integration test-all fixtures dev dev-replay down web-dev web-check e2e api-types tiles

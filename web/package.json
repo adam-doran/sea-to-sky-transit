@@ -8,8 +8,9 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src tests",
+    "lint": "eslint src tests e2e playwright.config.ts",
     "test": "vitest run",
+    "e2e": "playwright test",
     "api-types": "openapi-typescript src/api/openapi.json -o src/api/schema.d.ts"
   },
   "engines": {
@@ -24,6 +25,7 @@
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
+    "@playwright/test": "1.63.0",
     "@preact/preset-vite": "2.10.6",
     "@types/geojson": "7946.0.16",
     "@types/node": "24.19.0",
